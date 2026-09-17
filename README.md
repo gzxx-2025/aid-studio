@@ -391,7 +391,8 @@ aid-studio（Maven 多模块单体）
 
 | 文档 | 说明 |
 |------|------|
-| [部署指南](deploy/README.md) | Docker / systemd 部署、配置项、HTTPS、中间件、升级、回退与卸载 |
+| [部署指南](deploy/README.md) | Docker / systemd 部署、配置项、兼容性矩阵、HTTPS、中间件、升级、回退与卸载 |
+| [Provider 接入指南](docs/provider-integration.md) | 公开模型 Provider 的能力声明、统一任务流程与提交检查清单 |
 | [English guide](README.en.md) | English overview, installation, first project and maintenance |
 | [贡献指南](CONTRIBUTING.md) | 问题报告、改动范围、开发验证与 PR 提交 |
 | [获取帮助](SUPPORT.md) | 使用、部署和模型配置问题的反馈入口 |
