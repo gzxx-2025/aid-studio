@@ -13,6 +13,27 @@
 
 ## 目录说明
 
+## Deployment verification matrix
+
+The installer supports both Docker and host-based deployment on 64-bit Linux. The
+following matrix records the environments covered by the repository documentation;
+an environment is marked *pending* until it has been exercised with the current
+installer and its result can be reproduced from the command line.
+
+| Distribution | Architecture | Method | MySQL / Redis | Result |
+|---|---|---|---|---|
+| Ubuntu 22.04 LTS | amd64 | Docker | bundled | pending verification |
+| Debian 12 | amd64 | Docker | bundled | pending verification |
+| Rocky Linux 9 | amd64 | Docker | external or bundled | pending verification |
+| AlmaLinux 9 | amd64 | host / systemd | external | pending verification |
+| CentOS 7 | amd64 | host / systemd | external | pending verification |
+| Ubuntu 22.04 LTS | arm64 | Docker | bundled | pending verification |
+
+Only rows with a recorded installer run should be changed from *pending
+verification*. When adding a verified row, include the verification date, the
+`aid status` output, and any known limitation; redact addresses, credentials,
+tokens, and private configuration values.
+
 ```text
 deploy/
 ├── aid.sh                         # 统一部署管理脚本（菜单式，见下）
