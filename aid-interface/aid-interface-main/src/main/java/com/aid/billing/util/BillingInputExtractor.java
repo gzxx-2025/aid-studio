@@ -41,6 +41,8 @@ public final class BillingInputExtractor {
     private static final int TEXT_ESTIMATED_OUTPUT_TOKENS_HARD_CAP = 1_600_000;
     /** 图片 expectedImageCount 硬上限（在 capability 上限之上再加一层绝对兜底）。 */
     private static final int IMAGE_EXPECTED_COUNT_HARD_CAP = 16;
+    /** 图层拆分的底图与透明图层共用一个请求，仍由所选能力的 maxOutputCount 再限制。 */
+    private static final int IMAGE_LAYER_EXPECTED_COUNT_HARD_CAP = 64;
     /** 视频 durationSeconds 硬上限：300 秒足够覆盖任何合法视频生成。 */
     private static final int VIDEO_DURATION_HARD_CAP_SECONDS = 300;
     /** TTS text 字符硬上限（与 StoryboardWorkbenchServiceImpl.TTS_TEXT_MAX_LENGTH 对齐）。 */
@@ -220,6 +222,8 @@ public final class BillingInputExtractor {
             return 1;
         }
         Map<String, Object> options = request.getOptions();
+        int hardCap = "image_layer_decomposition".equals(request.getCapabilityCode())
+                ? IMAGE_LAYER_EXPECTED_COUNT_HARD_CAP : IMAGE_EXPECTED_COUNT_HARD_CAP;
         if (options != null) {
             Object forceSingle = options.get("force_single");
             if (forceSingle != null && Boolean.parseBoolean(String.valueOf(forceSingle))) {
@@ -228,9 +232,9 @@ public final class BillingInputExtractor {
         }
         Integer explicit = request.getExpectedImageCount();
         if (explicit != null && explicit > 0) {
-            if (explicit > IMAGE_EXPECTED_COUNT_HARD_CAP) {
+            if (explicit > hardCap) {
                 log.info("图片生成数量超过系统安全上限: actual={}, max={}",
-                        explicit, IMAGE_EXPECTED_COUNT_HARD_CAP);
+                        explicit, hardCap);
                 throw new ServiceException("图片数量超限");
             }
             return explicit;
@@ -240,9 +244,9 @@ public final class BillingInputExtractor {
             if (n != null) {
                 int parsed = toInt(n);
                 if (parsed > 0) {
-                    if (parsed > IMAGE_EXPECTED_COUNT_HARD_CAP) {
+                    if (parsed > hardCap) {
                         log.info("图片生成数量超过系统安全上限: actual={}, max={}",
-                                parsed, IMAGE_EXPECTED_COUNT_HARD_CAP);
+                                parsed, hardCap);
                         throw new ServiceException("图片数量超限");
                     }
                     return parsed;

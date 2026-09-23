@@ -1,6 +1,7 @@
 package com.aid.billing.model;
 
 import lombok.Data;
+import java.util.List;
 
 /**
  * 结算规则：主要给文本模型使用，采用只退不补（REFUND_ONLY）策略。
@@ -25,4 +26,7 @@ public class SettleRule {
 
     /** Token计费口径：AGGREGATE（父级总量）或 BUCKETED（互斥子桶）。 */
     private String usagePricingMode;
+
+    /** Optional per-output-image pixel tiers; prices are frozen in billingRuleJson. */
+    private List<ImageOutputPixelTier> imageOutputPixelTiers;
 }

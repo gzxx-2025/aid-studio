@@ -9,6 +9,7 @@ import com.aid.domain.vo.AiModelConfigVo;
 import com.aid.media.constants.VolcengineConstants;
 import com.aid.media.dto.MediaImageGenerateRequest;
 import com.aid.media.provider.ImageProviderClient;
+import com.aid.media.provider.ImageOutputItem;
 import com.aid.media.provider.ReferenceImageLimiter;
 import com.aid.media.provider.ReferencePromptSanitizer;
 import com.aid.media.provider.SubmitTimeoutResolver;
@@ -19,6 +20,9 @@ import com.volcengine.ark.runtime.model.images.generation.ImagesResponse;
 import com.volcengine.ark.runtime.model.images.generation.ResponseFormat;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.aid.common.exception.ServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
@@ -29,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 火山引擎 Seedream 图片生成，复用官方 DTO 映射并按配置的 HTTP 路径提交。
@@ -42,6 +47,8 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
 
     /** Seedream 5.0 Pro 官方默认参考图上限 10；Lite/4.x 为 14。运营可在 capability_json.maxReferenceImages 覆盖。 */
     private static final int DEFAULT_MAX_REFERENCE_IMAGES = 10;
+    private static final String LAYER_CAPABILITY = "image_layer_decomposition";
+    private static final String LAYER_MODEL = "doubao-seedream-5-0-pro-260628";
 
     /** Seedream 5.0 Pro 官方 1K/2K 推荐尺寸，用于把平台“档位 + 比例”转换为单一 size 字段。 */
     private static final Map<String, String> SEEDREAM_1K_SIZES = createSeedream1KSizes();
@@ -65,6 +72,38 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
     }
 
     @Override
+    public void validateRequest(AiModelConfigVo modelConfig, MediaImageGenerateRequest request) {
+        if (!isLayerRequest(request)) return;
+        if (!LAYER_MODEL.equals(resolveEffectiveModel(modelConfig, request))) {
+            throw new ServiceException("所选模型暂不支持图层分离");
+        }
+        if (request.getMaskImageUrl() != null || request.getNegativePrompt() != null) {
+            throw new ServiceException("图层分离不支持蒙版或负向提示词");
+        }
+        String size = request.getSize();
+        if (size != null && !List.of("auto", "1K", "1.5K", "2K").contains(size)) {
+            throw new ServiceException("图层分离分辨率仅支持 auto、1K、1.5K、2K");
+        }
+        if (request.getExpectedImageCount() != null && request.getExpectedImageCount() != 17) {
+            throw new ServiceException("图层分离预估输出数量必须为 17");
+        }
+        Map<String, Object> options = request.getOptions();
+        if (options != null && options.keySet().stream().anyMatch(key ->
+                Set.of("images", "layer_decomposition",
+                        "sequential_image_generation", "aspectRatio", "aspect_ratio")
+                        .contains(key))) {
+            throw new ServiceException("图层分离不支持额外参考图或供应商参数");
+        }
+        if (resolveSeedreamImageInputs(request, modelConfig).size() != 1) {
+            throw new ServiceException("图层分离必须且只能提供一张原图");
+        }
+    }
+
+    private static boolean isLayerRequest(MediaImageGenerateRequest request) {
+        return request != null && LAYER_CAPABILITY.equals(request.getCapabilityCode());
+    }
+
+    @Override
     public ProviderSubmitResult submit(AiModelConfigVo modelConfig, MediaImageGenerateRequest request) {
         ReferencePromptSanitizer.sanitizeInPlace(request,
                 ReferenceImageLimiter.resolveMax(modelConfig, DEFAULT_MAX_REFERENCE_IMAGES));
@@ -72,6 +111,7 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
         int timeoutSeconds = SubmitTimeoutResolver.resolveMs(modelConfig,
                 VolcengineConstants.HTTP_TIMEOUT_SECONDS * 1000) / 1000;
         String effectiveModel = resolveEffectiveModel(modelConfig, request);
+        validateRequest(modelConfig, request);
         GenerateImagesRequest generateRequest = buildRequest(effectiveModel, request, modelConfig);
 
         log.info("Volcengine 图片生成提交(Seedream), model={}, promptLen={}", effectiveModel,
@@ -80,8 +120,18 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
         ImagesResponse response;
         String raw;
         try {
-            HttpResult httpResponse = doPost(buildSubmitUrl(modelConfig), modelConfig.getApiKey(),
-                    com.aid.model.definition.ModelConfiguredRequestBody.applyJson(modelConfig, OBJECT_MAPPER.writeValueAsString(generateRequest), request), timeoutSeconds);
+            String body = com.aid.model.definition.ModelConfiguredRequestBody.applyJson(
+                    modelConfig, OBJECT_MAPPER.writeValueAsString(generateRequest), request);
+            if (isLayerRequest(request)) {
+                ObjectNode layerBody = (ObjectNode) OBJECT_MAPPER.readTree(body);
+                layerBody.put("layer_decomposition", true);
+                layerBody.put("size", StringUtils.defaultIfBlank(request.getSize(), "1.5K"));
+                layerBody.put("output_format", "png");
+                layerBody.put("stream", false);
+                if (StringUtils.isBlank(request.getPrompt())) layerBody.remove("prompt");
+                body = OBJECT_MAPPER.writeValueAsString(layerBody);
+            }
+            HttpResult httpResponse = doPost(buildSubmitUrl(modelConfig), modelConfig.getApiKey(), body, timeoutSeconds);
             raw = httpResponse.body();
             if (httpResponse.statusCode() < 200 || httpResponse.statusCode() >= 300) {
                 log.error("Volcengine 图片生成调用失败, model={}, httpStatus={}, responseLength={}",
@@ -98,13 +148,30 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
         // Seedream 返回 response.getData() 为 URL 列表，按实际张数全部采集，供图片计费按量结算。
         List<String> resultUrls = new ArrayList<>();
         if (response.getData() != null) {
-            response.getData().forEach(item -> {
+            for (var item : response.getData()) {
                 if (item != null && StringUtils.isNotBlank(item.getUrl())) {
                     resultUrls.add(item.getUrl());
                 }
-            });
+            }
         }
         String directUrl = resultUrls.isEmpty() ? null : resultUrls.get(0);
+
+        List<ImageOutputItem> imageOutputs = null;
+        if (isLayerRequest(request) && directUrl != null) {
+            try {
+                imageOutputs = readLayerOutputs(raw);
+                if (imageOutputs.isEmpty() || imageOutputs.size() > 17
+                        || imageOutputs.get(0).getZIndex() == null
+                        || imageOutputs.get(0).getZIndex() != 0) {
+                    throw new IllegalArgumentException("图层分离结果结构无效");
+                }
+                resultUrls = imageOutputs.stream().map(ImageOutputItem::getUrl).toList();
+                directUrl = resultUrls.get(0);
+            } catch (Exception invalid) {
+                log.error("Seedream 图层分离结果结构无效, model={}", effectiveModel, invalid);
+                return ProviderSubmitResult.builder().rawResponse("图层分离结果结构无效").build();
+            }
+        }
 
         if (StringUtils.isBlank(directUrl) && response.getError() != null) {
             log.error("Volcengine 图片生成返回错误, error={}", response.getError());
@@ -113,9 +180,55 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
         return ProviderSubmitResult.builder()
                 .directUrl(directUrl)
                 .resultUrls(resultUrls)
+                .imageOutputs(imageOutputs)
                 .resultCount(resultUrls.isEmpty() ? null : resultUrls.size())
                 .rawResponse(raw)
                 .build();
+    }
+
+    private static List<ImageOutputItem> readLayerOutputs(String raw) throws Exception {
+        JsonNode data = OBJECT_MAPPER.readTree(raw).path("data");
+        if (!data.isArray()) throw new IllegalArgumentException("data 缺失");
+        List<ImageOutputItem> outputs = new ArrayList<>();
+        for (JsonNode item : data) {
+            if (!item.isObject() || item.path("url").asText("").isBlank()) {
+                throw new IllegalArgumentException("图层地址缺失");
+            }
+            ImageOutputItem output = new ImageOutputItem();
+            output.setUrl(item.path("url").asText());
+            if (item.has("z_index") && item.path("z_index").canConvertToInt())
+                output.setZIndex(item.path("z_index").asInt());
+            JsonNode size = item.path("size");
+            if (size.isTextual()) {
+                String[] dimensions = size.asText().split("[xX×]");
+                if (dimensions.length == 2) {
+                    output.setWidth(Integer.parseInt(dimensions[0].trim()));
+                    output.setHeight(Integer.parseInt(dimensions[1].trim()));
+                }
+            } else if (size.isObject()) {
+                if (size.path("width").canConvertToInt()) output.setWidth(size.path("width").asInt());
+                if (size.path("height").canConvertToInt()) output.setHeight(size.path("height").asInt());
+            }
+            if (output.getWidth() == null || output.getHeight() == null
+                    || output.getWidth() <= 0 || output.getHeight() <= 0) {
+                throw new IllegalArgumentException("图层尺寸缺失");
+            }
+            output.setName(item.path("name").asText(null));
+            output.setDescription(item.path("description").asText(null));
+            output.setOutputFormat(item.path("output_format").asText(null));
+            if (item.path("bounding_box").isObject()) {
+                output.setBoundingBox(OBJECT_MAPPER.convertValue(item.path("bounding_box"), Map.class));
+            }
+            outputs.add(output);
+        }
+        outputs.sort(java.util.Comparator.comparing(ImageOutputItem::getZIndex,
+                java.util.Comparator.nullsLast(Integer::compareTo)));
+        for (int index = 0; index < outputs.size(); index++) {
+            if (outputs.get(index).getZIndex() == null || outputs.get(index).getZIndex() != index) {
+                throw new IllegalArgumentException("图层顺序无效");
+            }
+        }
+        return outputs;
     }
 
     @Override
@@ -146,7 +259,7 @@ public class VolcengineImageProviderClient implements ImageProviderClient {
         GenerateImagesRequest.Builder builder = GenerateImagesRequest.builder()
                 .model(model)
                 .prompt(request.getPrompt())
-                .size(resolveSeedreamSize(request))
+                .size(isLayerRequest(request) ? StringUtils.defaultIfBlank(request.getSize(), "1.5K") : resolveSeedreamSize(request))
                 .outputFormat(VolcengineConstants.DEFAULT_OUTPUT_FORMAT)
                 .responseFormat(ResponseFormat.Url)
                 .stream(VolcengineConstants.DEFAULT_STREAM)

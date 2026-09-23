@@ -47,6 +47,7 @@ public final class ModelBillingRuleValidator {
                 reject(model, null, "skus不是数组");
             }
             int enabledCount = 0;
+            BigDecimal minimumEnabledImagePrice = null;
             for (JsonNode sku : skus) {
                 if (!sku.path("enabled").asBoolean(false)) {
                     continue;
@@ -62,6 +63,11 @@ public final class ModelBillingRuleValidator {
                 }
                 if (!hasValidMainPrice(sku, meterType, explicitMeterType)) {
                     reject(model, skuCode, meterType + "主价格缺失");
+                }
+                if ("PER_IMAGE".equals(meterType)) {
+                    BigDecimal configuredPrice = sku.path("price").decimalValue();
+                    minimumEnabledImagePrice = minimumEnabledImagePrice == null ? configuredPrice
+                            : minimumEnabledImagePrice.min(configuredPrice);
                 }
                 if (sku.hasNonNull("outputPixelsPerUnit") && (!"PER_IMAGE".equals(meterType)
                         || !positive(sku.get("outputPixelsPerUnit"))
@@ -80,6 +86,28 @@ public final class ModelBillingRuleValidator {
             }
             if (enabledCount == 0 && "0".equals(model.getStatus())) {
                 reject(model, null, "无启用SKU");
+            }
+            JsonNode tiers = root.path("settleRule").path("imageOutputPixelTiers");
+            if (!tiers.isMissingNode() && !tiers.isNull()) {
+                if (!"PER_IMAGE".equals(fallbackMeterType) || !tiers.isArray() || tiers.isEmpty()
+                        || minimumEnabledImagePrice == null) {
+                    reject(model, null, "输出像素档位口径无效");
+                }
+                long previousLimit = 0;
+                for (int index = 0; index < tiers.size(); index++) {
+                    JsonNode tier = tiers.get(index);
+                    JsonNode limit = tier.path("maxPixels");
+                    JsonNode price = tier.path("price");
+                    boolean last = index == tiers.size() - 1;
+                    if (!tier.isObject() || !nonNegative(price)
+                            || price.decimalValue().compareTo(minimumEnabledImagePrice) > 0
+                            || (last ? !limit.isNull()
+                            : !limit.isIntegralNumber() || !limit.canConvertToLong()
+                            || limit.longValue() <= previousLimit)) {
+                        reject(model, null, "输出像素档位需递增，末档无上限且价格不高于预冻结价");
+                    }
+                    if (!last) previousLimit = limit.longValue();
+                }
             }
         } catch (ServiceException ex) {
             throw ex;

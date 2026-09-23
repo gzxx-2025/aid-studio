@@ -77,6 +77,7 @@ export interface ModelCapabilityDefinition {
 export const CAPABILITY_OPTIONS = [
   ['text', '文本生成'], ['text_to_image', '文生图'], ['image_to_image', '图生图'],
   ['image_edit', '图片编辑'], ['image_inpainting', '区域编辑'], ['image_outpainting', '图片扩展'],
+  ['image_layer_decomposition', '图层分离'],
   ['image_upscale', '图片高清'], ['text_to_video', '文生视频'],
   ['image_to_video', '首帧图生视频'], ['start_end_to_video', '首尾帧'], ['reference_to_video', '多参考'],
   ['last_frame_to_video', '尾帧图生视频'],

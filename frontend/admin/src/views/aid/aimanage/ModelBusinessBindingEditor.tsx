@@ -20,7 +20,9 @@ export function BusinessDefaults({ definition, value, onChange }: { definition?:
     defaults = value ? JSON.parse(value) : {};
     if (!defaults || Array.isArray(defaults) || typeof defaults !== 'object') throw new Error();
   } catch { return <Alert type="error" message="已有默认参数无法读取，请先核对配置来源" />; }
-  return <><ModelParameterPreview showMaterialStatistics={false} fields={definition.parameters || []} rules={definition.rules || []} value={defaults}
+  const defaultFields = (definition.parameters || []).filter((field) => !field.materialRole);
+  return <>{defaultFields.length !== (definition.parameters || []).length && <Alert type="info" showIcon style={{ marginBottom: 12 }} message="原图等素材由每次调用提供，这里只配置可复用的默认参数" />}
+    <ModelParameterPreview showMaterialStatistics={false} fields={defaultFields} rules={definition.rules || []} value={defaults}
     onChange={(next) => onChange(JSON.stringify(next))} /><Button onClick={() => onChange(null)}>恢复使用模型默认值</Button></>;
 }
 const loadFunctions = (): Promise<FunctionOption[]> => sharedReadRequest('/aid/funcconfig/list', { pageNum: 1, pageSize: 1000 })

@@ -697,6 +697,19 @@ export function parseBillingRuleJson(json: string): {
     result.skuEditData.usagePricingMode = rule.settleRule?.usagePricingMode === 'BUCKETED'
       ? 'BUCKETED' : 'AGGREGATE';
     result.skuEditData.allowExtraCharge = rule.settleRule?.allowExtraCharge === true;
+    if (rule.settleRule?.imageOutputPixelTiers != null) {
+      const tiers = rule.settleRule.imageOutputPixelTiers;
+      if (!Array.isArray(tiers) || tiers.some((tier: any) => !tier || typeof tier !== 'object'
+        || (tier.maxPixels != null && (!Number.isSafeInteger(tier.maxPixels) || tier.maxPixels <= 0))
+        || (tier.price != null && (typeof tier.price !== 'number' || tier.price < 0)))) {
+        result.skuEditData.parseError = true;
+      } else {
+        result.skuEditData.imageOutputPixelTiers = tiers.map((tier: any) => ({
+          maxPixels: tier.maxPixels == null ? null : tier.maxPixels,
+          price: tier.price == null ? null : tier.price
+        }));
+      }
+    }
     // 规则级输入媒体计费（图片/视频输入附加费）
     if (isMalformedInputPricing(rule.inputPricing)) result.skuEditData.parseError = true;
     result.skuEditData.inputPricing = normalizeInputPricing(rule.inputPricing);
@@ -934,6 +947,13 @@ export function buildBillingRuleJson(
   settleRule.charToTokenRatio = skuData.charToTokenRatio || 2;
   settleRule.allowExtraCharge = skuData.allowExtraCharge === true;
   settleRule.usagePricingMode = skuData.usagePricingMode || 'AGGREGATE';
+  if (skuData.imageOutputPixelTiers) {
+    if (skuData.imageOutputPixelTiers.length > 0) {
+      settleRule.imageOutputPixelTiers = skuData.imageOutputPixelTiers;
+    } else {
+      delete settleRule.imageOutputPixelTiers;
+    }
+  }
   rule.settleRule = settleRule;
   // 规则级输入媒体计费（图片/视频输入附加费默认值）
   const ruleInput = mergeInputPricing(rule.inputPricing, skuData.inputPricing);

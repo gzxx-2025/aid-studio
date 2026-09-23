@@ -3,6 +3,7 @@ package com.aid.diagnostics;
 import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.aid.common.exception.ServiceException;
 import com.aid.aid.domain.AidDiagnosticDelivery;
@@ -23,6 +24,7 @@ public class DiagnosticService {
     private final DiagnosticSecretStore secrets;
     private final DiagnosticMetadata metadata;
     private final DiagnosticRepository mapper;
+    private final DiagnosticHandlingStatus handling;
     private final DiagnosticCapture capture;
     private final TransactionTemplate transactions;
     private final ScheduledExecutorService scheduler=Executors.newSingleThreadScheduledExecutor(task->{Thread t=new Thread(task,"diagnostic-scheduler");t.setDaemon(true);return t;});
@@ -54,7 +56,9 @@ public class DiagnosticService {
     }
     public Map<String,Object> page(int page,int size) {
         requireApproved();requireEnabled();int safeSize=Math.min(100,Math.max(1,size));
-        return Map.of("rows",mapper.page((Math.max(1,page)-1)*safeSize,safeSize),"total",mapper.count());
+        List<Map<String,Object>> rows=mapper.page((Math.max(1,page)-1)*safeSize,safeSize);
+        handling.attach(rows);
+        return Map.of("rows",rows,"total",mapper.count());
     }
     public Map<String,Object> detail(String eventId) {
         requireApproved();requireEnabled();Map<String,Object> event=mapper.detail(eventId);
@@ -156,7 +160,7 @@ public class DiagnosticService {
         state.put("applicationHistory",history);
     }
     private void clearApplication(JSONObject state) {
-        for(String field:List.of("application","applicationQueryToken","verificationId","verificationQueryToken","verificationStartedAt","supportVerificationToken"))state.remove(field);
+        for(String field:List.of("application","applicationQueryToken","verificationId","verificationQueryToken","verificationStartedAt","supportVerificationToken","supportServer"))state.remove(field);
     }
     private void requireApproved() {
         JSONObject access=access();
@@ -167,58 +171,89 @@ public class DiagnosticService {
         if(!request.getBooleanValue("consent"))throw new ServiceException("请确认本次远程只读排查授权");
         JSONObject server=request.getJSONObject("server");
         if(server==null)throw new ServiceException("请填写服务器连接资料");
-        required(server,"host",253);required(server,"username",100);required(server,"password",1024);
+        JSONObject verifiedServer=new JSONObject();
+        verifiedServer.put("host",required(server,"host",253));
+        verifiedServer.put("username",required(server,"username",100));
+        verifiedServer.put("password",required(server,"password",1024));
         int port=server.getIntValue("port");if(port<1 || port>65535)throw new ServiceException("端口须为 1 至 65535");
-        JSONObject payload=new JSONObject();payload.put("server",server);payload.put("consent",true);
+        verifiedServer.put("port",port);
+        JSONObject payload=new JSONObject();payload.put("server",verifiedServer);payload.put("consent",true);
         JSONObject config=metadata.get();JSONObject result=remote("POST",config.getString("supportVerificationUrl"),envelope(payload,UUID.randomUUID().toString(),config),null);
         String queryToken=result.getString("queryToken");
-        settings.mutate(state->{state.put("verificationQueryToken",queryToken);state.put("verificationId",result.getString("verificationId"));state.put("verificationStartedAt",System.currentTimeMillis());state.remove("supportVerificationToken");});result.remove("queryToken");return result;
+        settings.mutate(state->{state.put("verificationQueryToken",queryToken);state.put("verificationId",result.getString("verificationId"));state.put("verificationStartedAt",System.currentTimeMillis());state.put("supportServer",verifiedServer);state.remove("supportVerificationToken");});result.remove("queryToken");return result;
     }
     public synchronized JSONObject verification() {
         requireApproved();requireEnabled();JSONObject state=settings.read();String id=state.getString("verificationId");
-        if(id==null || System.currentTimeMillis()-state.getLongValue("verificationStartedAt")>15*60*1000L)throw new ServiceException("连接验证已过期，请重新验证");
+        if(id==null || System.currentTimeMillis()-state.getLongValue("verificationStartedAt")>DiagnosticRetention.VERIFICATION_USE_MILLIS)throw new ServiceException("连接验证已过期，请重新验证");
         JSONObject result=remote("GET",metadata.get().getString("supportVerificationUrl")+"/"+DiagnosticCapture.validId(id),null,state.getString("verificationQueryToken"));
         if("verified".equals(result.getString("status")))settings.mutate(current->{if(id.equals(current.getString("verificationId")))current.put("supportVerificationToken",result.getString("verificationToken"));});
         result.remove("queryToken");result.remove("verificationToken");return result;
     }
     public Map<String,Object> send(JSONObject input) {
+        if(input==null)throw new ServiceException("请选择一个错误事件");
         requireApproved();requireEnabled();JSONObject state=settings.read();
-        if(state.getString("aesKey")==null)throw new ServiceException("请先生成或填写 AES 密钥");
-        List<String> eventIds=input.getList("eventIds",String.class);
-        if(eventIds==null || eventIds.isEmpty() || eventIds.size()>50)throw new ServiceException("请选择 1 至 50 条错误");
+        Object selected=input.get("eventIds");
+        if(!(selected instanceof List<?> eventIds) || eventIds.size()!=1 || !(eventIds.get(0) instanceof String eventId)
+                || !canonicalId(eventId))
+            throw new ServiceException("每次只能提交一个有效错误事件");
+        String selectedRequestId=null;
+        if(input.containsKey("requestId")) {
+            if(!(input.get("requestId") instanceof String requestId) || !canonicalId(requestId))
+                throw new ServiceException("请求 ID 格式无效");
+            selectedRequestId=requestId;
+        }
         JSONObject options=new JSONObject();
         JSONObject optional=input.getJSONObject("optionalSupport");
-        if(optional!=null && !optional.isEmpty())options.put("optionalSupport",optionalSupport(optional));
+        JSONObject support=optional==null?new JSONObject():optionalSupport(optional);
         if(input.getBooleanValue("includeServer")) {
-            if(!state.containsKey("supportVerificationToken") || System.currentTimeMillis()-state.getLongValue("verificationStartedAt")>15*60*1000L)throw new ServiceException("请先验证当前服务器资料");
-            options.put("supportVerificationToken",state.getString("supportVerificationToken"));
+            String verificationToken=state.getString("supportVerificationToken");
+            if(verificationToken==null || verificationToken.isBlank() || System.currentTimeMillis()-state.getLongValue("verificationStartedAt")>DiagnosticRetention.VERIFICATION_USE_MILLIS)throw new ServiceException("请先验证当前服务器资料");
+            JSONObject server=state.getJSONObject("supportServer");
+            if(server==null)throw new ServiceException("已验证服务器资料不可用，请重新验证");
+            JSONObject attached=new JSONObject(server);
+            attached.put("consent",true);
+            attached.put("verified",true);
+            support.put("server",attached);
+            options.put("supportVerificationToken",verificationToken);
         }
-        options.put("expiresAt",System.currentTimeMillis()+24*60*60*1000L);
+        if(!support.isEmpty())options.put("optionalSupport",support);
+        options.put("expiresAt",System.currentTimeMillis()+DiagnosticRetention.LOCAL_MILLIS);
         List<String> reportIds=new ArrayList<>();
+        String expectedRequestId=selectedRequestId;
         transactions.executeWithoutResult(transaction->{
             mapper.lockAdmission();
-            long available=500-mapper.pending();
-            for(String id:new LinkedHashSet<>(eventIds)) {
-                Map<String,Object> event=mapper.reservationInfo(id);
-                if(event==null)throw new ServiceException("所选错误已不存在，请刷新列表");
-                if(event.get("reportId")!=null) {reportIds.add(String.valueOf(event.get("reportId")));continue;}
-                if(available--<=0)throw new ServiceException("发送队列已满，请稍后再试");
-                String reportId=UUID.randomUUID().toString();
-                if(mapper.reserve(id,reportId)==1) {mapper.enqueue(reportId,id,secrets.seal(options.toJSONString()));reportIds.add(reportId);}
-                else throw new ServiceException("错误记录已变更，请刷新列表");
-            }
+            settings.ensureKey();
+            Map<String,Object> event=mapper.reservationInfo(eventId);
+            if(event==null)throw new ServiceException("所选错误已不存在，请刷新列表");
+            String actualRequestId=Objects.toString(event.get("requestId"),"");
+            if(actualRequestId.isBlank() || expectedRequestId!=null && !expectedRequestId.equals(actualRequestId))
+                throw new ServiceException("请求 ID 与所选错误不一致，请刷新列表");
+            if(event.get("reportId")!=null) {reportIds.add(String.valueOf(event.get("reportId")));return;}
+            if(mapper.pending()>=500)throw new ServiceException("发送队列已满，请稍后再试");
+            String reportId=UUID.randomUUID().toString();
+            if(mapper.reserve(eventId,reportId)==1) {mapper.enqueue(reportId,eventId,secrets.seal(options.toJSONString()));reportIds.add(reportId);}
+            else throw new ServiceException("错误记录已变更，请刷新列表");
         });
         return Map.of("reportIds",reportIds,"message","已提交发送，无需重复操作");
     }
     private Map<String,Object> envelope(JSONObject payload,String reportId,JSONObject config) {
         String aesKey=settings.read().getString("aesKey");
-        if(aesKey==null)throw new ServiceException("请先生成或填写 AES 密钥");
+        if(aesKey==null || aesKey.isBlank())aesKey=transactions.execute(transaction->{mapper.lockAdmission();return settings.ensureKey();});
         return DiagnosticCrypto.encrypt(payload.toJSONString(),aesKey,config.getString("rsaPublicKey"),config.getString("rsaKeyId"),reportId,settings.instanceId());
     }
     private void dispatch() {
         if(!polling.compareAndSet(false,true))return;
         try {
-            if(System.currentTimeMillis()-lastCleanup>3600000) {mapper.recover();mapper.cleanupEvents();mapper.cleanupDeliveries();lastCleanup=System.currentTimeMillis();}
+            if(System.currentTimeMillis()-lastCleanup>5000) {
+                mapper.recover();
+                transactions.executeWithoutResult(tx->{mapper.lockAdmission();mapper.cleanupExpired();});
+                lastCleanup=System.currentTimeMillis();
+            }
+            JSONObject state=settings.read();
+            long startedAt=state.getLongValue("verificationStartedAt");
+            if(startedAt>0 && DiagnosticRetention.expired(startedAt,System.currentTimeMillis()))
+                settings.mutate(current->{if(current.getLongValue("verificationStartedAt")==startedAt)
+                    for(String field:List.of("verificationId","verificationQueryToken","verificationStartedAt","supportVerificationToken","supportServer"))current.remove(field);});
             if(!settings.enabled())return;
             for(Map<String,Object> row:mapper.pendingRows()) {
                 if(sender.getQueue().remainingCapacity()==0)break;
@@ -231,6 +266,12 @@ public class DiagnosticService {
         String id=String.valueOf(row.get("reportId"));if(mapper.claim(id)!=1)return;
         try {
             requireApproved();requireEnabled();AidDiagnosticDelivery delivery=mapper.delivery(id);
+            if(delivery==null)return;
+            if(DiagnosticRetention.expired(delivery.getCreateTime().getTime(),System.currentTimeMillis())
+                    || mapper.detail(delivery.getEventId())==null) {
+                mapper.finish(id,"failed","本地错误或报告已超过 7 天保留期");
+                return;
+            }
             String packet=delivery.getEnvelopeJson();
             JSONObject config=metadata.get();
             if(packet==null) {
@@ -256,18 +297,20 @@ public class DiagnosticService {
     public void retry(String id) {
         requireApproved();requireEnabled();AidDiagnosticDelivery delivery=mapper.delivery(id);
         if(delivery==null)throw new ServiceException("报告不存在或已清理");
+        if(DiagnosticRetention.expired(delivery.getCreateTime().getTime(),System.currentTimeMillis())
+                || mapper.detail(delivery.getEventId())==null)throw new ServiceException("报告已超过本地 7 天保留期");
         boolean queryOnly=delivery.getProtectedReceipt()!=null;
         if(!queryOnly && delivery.getEnvelopeJson()!=null) {
             long createdAt=JSON.parseObject(delivery.getEnvelopeJson()).getLongValue("createdAt");
-            if(System.currentTimeMillis()-createdAt>24*60*60*1000L)throw new ServiceException("原发送包已超过 24 小时准入期限，需要新建报告，不能继续重发旧包");
+            if(DiagnosticRetention.expired(createdAt,System.currentTimeMillis()))throw new ServiceException("原发送包已超过 7 天准入期限，不能继续重发旧包");
         }
-        transactions.executeWithoutResult(transaction->{mapper.lockAdmission();if(mapper.pending()>=500)throw new ServiceException("发送队列已满，请稍后再试");mapper.retry(id,queryOnly);});
+        transactions.executeWithoutResult(transaction->{mapper.lockAdmission();if(mapper.pending()>=500)throw new ServiceException("发送队列已满，请稍后再试");if(mapper.retry(id,queryOnly)!=1)throw new ServiceException("报告状态已变更或已过期");});
     }
     private void checkReceipt(String id) {
         if(mapper.claimReceipt(id)!=1)return;
         try {
             requireApproved();
-            AidDiagnosticDelivery delivery=mapper.delivery(id);JSONObject packet=JSON.parseObject(delivery.getEnvelopeJson());
+            AidDiagnosticDelivery delivery=mapper.delivery(id);if(delivery==null)return;JSONObject packet=JSON.parseObject(delivery.getEnvelopeJson());
             JSONObject state=remote("GET",metadata.get().getString("reportUrl")+"/"+id+"?instanceId="+packet.getString("instanceId"),null,secrets.open(delivery.getProtectedReceipt()));
             String status=state.getString("status");
             if("ready".equals(status))mapper.finish(id,"delivered","官方已完成接收和解密");
@@ -316,5 +359,9 @@ public class DiagnosticService {
     }
     private String required(JSONObject input,String key,int max) {
         String value=input.getString(key);if(value==null || value.isBlank() || value.length()>max)throw new ServiceException("请检查字段 "+key+" 的内容与长度");return value.trim();
+    }
+    private boolean canonicalId(String value) {
+        try {return UUID.fromString(value).toString().equals(value);}
+        catch(Exception invalid){return false;}
     }
 }

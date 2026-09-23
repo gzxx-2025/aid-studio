@@ -14,7 +14,7 @@ aid:
   captchaType: math
   # 系统升级（AID产品版本，发布构建时注入；更新清单地址等动态配置存于 aid_config(category=system_upgrade)）
   upgrade:
-    current-version: 2.2.0
+    current-version: 2.2.1
     manifest-public-key: 9Ez/VMofgjCU0CNmE6Jq8LKLNyfDQqbbvNTTGV5BYrk=
   billing:
     text:

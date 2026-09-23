@@ -41,6 +41,9 @@ public class ProviderSubmitResult {
      */
     private List<String> resultUrls;
 
+    /** Ordered structured image outputs; URL list remains for legacy consumers. */
+    private List<ImageOutputItem> imageOutputs;
+
     /**
      * 同步直出实际图片张数（图片 provider 填充）。
      * 图片计费按实际张数结算，以该字段为准；为空时按 directUrl 有无兜底为 1/0。

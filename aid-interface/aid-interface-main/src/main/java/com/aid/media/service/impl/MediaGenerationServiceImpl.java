@@ -63,6 +63,7 @@ import com.aid.media.enums.MediaType;
 import com.aid.media.eta.MediaEtaRecorder;
 import com.aid.media.eta.MediaEtaService;
 import com.aid.media.provider.ImageProviderClient;
+import com.aid.media.provider.ImageOutputItem;
 import com.aid.media.provider.KlingVideoRequestBuilder;
 import com.aid.media.provider.MinimaxH3VideoRequestBuilder;
 import com.aid.media.provider.DmcH3VideoRequestBuilder;
@@ -2142,11 +2143,24 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         // 3b) URL 落库模式：上游直接返回产物 URL，写 originUrl，后续 persistOssIfNeeded 下载转存 OSS。
         if (StringUtils.isNotBlank(submitResult.getDirectUrl())) {
             log.info("media submit succeeded (URL), taskId={}, protocol={}", task.getId(), task.getProtocol());
+            task.setOriginUrl(submitResult.getDirectUrl());
+            persistSubmitResultManifest(task, submitResult, false);
+            if (isLayerDecomposition(protectedImageEditRequest(task))) {
+                try {
+                    validateLayerManifestBeforeSettlement(task);
+                } catch (LayerOutputInvalidException invalid) {
+                    task.setStatus(MediaTaskStatus.FAILED.name());
+                    task.setErrorMessage(invalid.getMessage());
+                    task.setErrorDetailJson(TaskErrorSnapshot.write(
+                            TaskErrorResult.of(TaskErrorCode.RESULT_INVALID, invalid.getMessage())));
+                    aidMediaResultMapper.delete(new LambdaQueryWrapper<AidMediaResult>()
+                            .eq(AidMediaResult::getTaskId, task.getId()));
+                    return closeFailedSubmitBilling(task, null);
+                }
+            }
             // 模型健康采集：同步直出成功
             recordSubmitHealthSuccess(task);
             task.setStatus(MediaTaskStatus.SUCCEEDED.name());
-            task.setOriginUrl(submitResult.getDirectUrl());
-            persistSubmitResultManifest(task, submitResult, false);
             task.setErrorMessage(null);
             // 三阶段计费：图片任务同步成功时必须传入真实张数 usageData，避免按预扣封顶。
             Map<String, Object> usageData = buildImageSettleUsageForSubmit(task, submitResult);
@@ -2228,6 +2242,29 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
     private void persistSubmitResultManifest(AidMediaTask task, ProviderSubmitResult submitResult,
                                              boolean alreadyPersisted) {
         if (task == null || submitResult == null || !MediaType.IMAGE.name().equals(task.getMediaType())) {
+            return;
+        }
+        if (submitResult.getImageOutputs() != null && !submitResult.getImageOutputs().isEmpty()) {
+            int index = 0;
+            for (ImageOutputItem output : submitResult.getImageOutputs()) {
+                String url = output.getUrl();
+                if (StringUtils.isBlank(url)) throw new ServiceException("图片结果地址缺失");
+                aidMediaResultMapper.upsertTaskResult(task.getId(), index, task.getMediaType(), url,
+                        task.getUserId() == null ? "" : String.valueOf(task.getUserId()));
+                Map<String, Object> metadata = new LinkedHashMap<>();
+                metadata.put("width", output.getWidth());
+                metadata.put("height", output.getHeight());
+                metadata.put("zIndex", output.getZIndex());
+                metadata.put("name", output.getName());
+                metadata.put("description", output.getDescription());
+                metadata.put("boundingBox", output.getBoundingBox());
+                metadata.put("outputFormat", output.getOutputFormat());
+                aidMediaResultMapper.update(null, new LambdaUpdateWrapper<AidMediaResult>()
+                        .eq(AidMediaResult::getTaskId, task.getId())
+                        .eq(AidMediaResult::getResultIndex, index)
+                        .set(AidMediaResult::getMetadataJson, com.alibaba.fastjson2.JSON.toJSONString(metadata)));
+                index++;
+            }
             return;
         }
         LinkedHashSet<String> ordered = new LinkedHashSet<>();
@@ -2366,6 +2403,11 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         Map<String, Object> usage = new HashMap<>();
         usage.put("actualImageCount", actualCount);
         usage.put("resultCount", actualCount);
+        if (submitResult != null && submitResult.getImageOutputs() != null
+                && !submitResult.getImageOutputs().isEmpty()) {
+            usage.put("outputImagePixels", submitResult.getImageOutputs().stream()
+                    .map(item -> Math.multiplyExact((long) item.getWidth(), item.getHeight())).toList());
+        }
         // 合并 provider 返回的 token usage（如 Gemini 图片模型会带 prompt_tokens/completion_tokens/total_tokens）
         if (submitResult != null && submitResult.getUsage() != null) {
             usage.putAll(submitResult.getUsage());
@@ -4884,12 +4926,14 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         try {
             MediaImageGenerateRequest request = JSONUtil.toBean(task.getRequestJson(),
                     MediaImageGenerateRequest.class);
-            return com.aid.media.provider.ImageEditAssetSupport.requiresResultProtection(request);
+            return com.aid.media.provider.ImageEditAssetSupport.requiresResultProtection(request)
+                    || isLayerDecomposition(request);
         } catch (RuntimeException ex) {
             log.warn("图片编辑后处理状态解析失败, taskId={}, errorType={}", task.getId(),
                     ex.getClass().getSimpleName());
             return task.getRequestJson().contains("image_inpainting")
-                    || task.getRequestJson().contains("image_outpainting");
+                    || task.getRequestJson().contains("image_outpainting")
+                    || task.getRequestJson().contains("image_layer_decomposition");
         }
     }
 
@@ -5015,11 +5059,83 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
             return null;
         }
         MediaImageGenerateRequest request = JSONUtil.toBean(task.getRequestJson(), MediaImageGenerateRequest.class);
-        if (!com.aid.media.provider.ImageEditAssetSupport.requiresResultProtection(request)) {
+        if (!com.aid.media.provider.ImageEditAssetSupport.requiresResultProtection(request)
+                && !isLayerDecomposition(request)) {
             return null;
         }
-        modelResourceUrlSigner.sign(request);
+        if (!isLayerDecomposition(request)) modelResourceUrlSigner.sign(request);
         return request;
+    }
+
+    private static boolean isLayerDecomposition(MediaImageGenerateRequest request) {
+        return request != null && "image_layer_decomposition".equals(request.getCapabilityCode());
+    }
+
+    private static final class LayerOutputInvalidException extends RuntimeException {
+        private LayerOutputInvalidException(String message) {
+            super(message);
+        }
+    }
+
+    /** Invalid layer bytes are permanent; reject them before the success ledger transition. */
+    private void validateLayerManifestBeforeSettlement(AidMediaTask task) {
+        List<AidMediaResult> results = selectOrderedTaskResults(task.getId());
+        if (results.isEmpty()) throw new LayerOutputInvalidException("图层分离结果清单缺失");
+        for (AidMediaResult result : results) {
+            if (StringUtils.isBlank(result.getOriginUrl())) {
+                throw new LayerOutputInvalidException("图层分离结果地址缺失");
+            }
+            byte[] bytes;
+            try {
+                bytes = downloadOriginBytesWithRetry(task, result.getOriginUrl());
+            } catch (RuntimeException unavailable) {
+                // Settlement must never succeed before every ordered output is readable and valid.
+                // A later persistence retry cannot safely reverse an already completed billing CAS.
+                log.warn("图层分离预校验下载失败，按失败退款收口, taskId={}, resultIndex={}",
+                        task.getId(), result.getResultIndex(), unavailable);
+                throw new LayerOutputInvalidException("图层分离结果暂时无法校验，请稍后重试");
+            }
+            validateLayerImageBytes(result, bytes);
+        }
+    }
+
+    private void validateLayerImageBytes(AidMediaResult result, byte[] generated) {
+        if (generated.length > 50L * 1024 * 1024) {
+            throw new LayerOutputInvalidException("图层图片超过文件大小上限");
+        }
+        if (generated.length < 8 || generated[0] != (byte) 0x89 || generated[1] != 'P'
+                || generated[2] != 'N' || generated[3] != 'G') {
+            throw new LayerOutputInvalidException("图层图片必须是 PNG");
+        }
+        java.awt.image.BufferedImage image;
+        try (javax.imageio.stream.ImageInputStream input = javax.imageio.ImageIO
+                .createImageInputStream(new java.io.ByteArrayInputStream(generated))) {
+            java.util.Iterator<javax.imageio.ImageReader> readers = javax.imageio.ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) throw new LayerOutputInvalidException("图层图片无法解码");
+            javax.imageio.ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                long pixels = (long) reader.getWidth(0) * reader.getHeight(0);
+                if (pixels <= 0 || pixels > 20_000_000L) {
+                    throw new LayerOutputInvalidException("图层图片像素超过上限");
+                }
+                image = reader.read(0);
+            } finally {
+                reader.dispose();
+            }
+        } catch (java.io.IOException invalid) {
+            throw new LayerOutputInvalidException("图层图片无法解码");
+        }
+        if (image == null || (result.getResultIndex() != null && result.getResultIndex() > 0
+                && !image.getColorModel().hasAlpha())) {
+            throw new LayerOutputInvalidException("透明图层缺少 Alpha 通道");
+        }
+        com.alibaba.fastjson2.JSONObject metadata = result.getMetadataJson() == null
+                ? null : com.alibaba.fastjson2.JSON.parseObject(result.getMetadataJson());
+        if (metadata == null || image.getWidth() != metadata.getIntValue("width")
+                || image.getHeight() != metadata.getIntValue("height")) {
+            throw new LayerOutputInvalidException("图层图片尺寸与上游元数据不符");
+        }
     }
 
     /**
@@ -5049,14 +5165,18 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         }
         if (results.isEmpty()) throw new ServiceException("图片编辑结果清单缺失");
 
-        com.aid.media.provider.ImageEditAssetSupport.PreparedProtection protection =
-                com.aid.media.provider.ImageEditAssetSupport.prepareResultProtection(request);
+        boolean layerDecomposition = isLayerDecomposition(request);
+        com.aid.media.provider.ImageEditAssetSupport.PreparedProtection protection = layerDecomposition
+                ? null : com.aid.media.provider.ImageEditAssetSupport.prepareResultProtection(request);
         for (AidMediaResult result : results) {
             if (StringUtils.isNotBlank(result.getOssUrl())) continue;
             if (StringUtils.isBlank(result.getOriginUrl())) throw new ServiceException("图片编辑结果地址缺失");
             byte[] generated = downloadOriginBytesWithRetry(task, result.getOriginUrl());
-            byte[] protectedBytes = com.aid.media.provider.ImageEditAssetSupport.protectResult(
-                    protection, generated);
+            byte[] protectedBytes = layerDecomposition ? generated
+                    : com.aid.media.provider.ImageEditAssetSupport.protectResult(protection, generated);
+            if (layerDecomposition) {
+                validateLayerImageBytes(result, generated);
+            }
             UploadResult upload;
             try {
                 upload = OssFactory.instance().uploadSuffix(protectedBytes, ".png", "image/png");

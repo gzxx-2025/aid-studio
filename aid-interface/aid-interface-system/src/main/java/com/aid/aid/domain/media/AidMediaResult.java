@@ -46,6 +46,9 @@ public class AidMediaResult extends BaseEntity {
     // 文件大小（Byte）。
     private Long fileSize;
 
+    /** Structured output dimensions and layer placement; never stores the provider URL. */
+    private String metadataJson;
+
     // 视频时长（秒），图片可为空。
     private Integer durationSeconds;
 }

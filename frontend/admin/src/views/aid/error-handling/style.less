@@ -1,0 +1,72 @@
+.diagnostics-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 2px 0 4px;
+
+    h3.ant-typography { margin: 0 0 4px; }
+  }
+
+  &__overview .ant-card { height: 100%; }
+  &__metric {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    margin: 6px 0;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  &__metric .ant-tag { font-size: 14px; padding: 2px 10px; }
+
+  &__access .ant-card-body { padding: 8px 16px; }
+  &__access .ant-collapse-header { align-items: center !important; }
+  &__access .ant-collapse-header-text { min-width: 0; }
+  &__access-body { display: flex; flex-direction: column; gap: 16px; padding: 0 8px 8px; }
+  &__access-body .ant-typography { margin: 0; }
+  &__access-body .ant-form { max-width: 760px; }
+
+  &__events .ant-card-head { gap: 12px; }
+  &__events .ant-card-head-title { min-width: 0; }
+  &__events .ant-card-extra { margin-inline-start: 0; }
+  &__events .ant-table-cell time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  &__json {
+    max-height: calc(100vh - 270px);
+    overflow: auto;
+    padding: 16px;
+    border: 1px solid var(--ant-color-border-secondary);
+    border-radius: 8px;
+    background: var(--ant-color-fill-quaternary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  &__support-form { margin-top: 16px; }
+  &__support-form .ant-collapse-content-box { padding-top: 16px !important; }
+  &__verify { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
+.diagnostics-page__send {
+  .ant-modal-body { overscroll-behavior: contain; }
+  .ant-modal-footer { display: flex; justify-content: flex-end; }
+}
+
+@media (max-width: 576px) {
+  .diagnostics-page {
+    &__header { align-items: flex-start; }
+    &__events .ant-card-head { padding: 12px 16px; }
+    &__events .ant-card-head-wrapper { align-items: flex-start; flex-direction: column; }
+    &__events .ant-card-extra, &__events .ant-card-extra .ant-space { width: 100%; }
+  }
+  .diagnostics-page__send { top: 12px; }
+}

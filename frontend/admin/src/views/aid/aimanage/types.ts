@@ -175,6 +175,8 @@ export interface SkuEditData {
   /** 实际用量超过预冻结时是否允许补扣；缺省为 false。 */
   allowExtraCharge?: boolean;
   skuList: Sku[];
+  /** Optional actual-output-pixel prices; the SKU price remains the maximum pre-hold unit price. */
+  imageOutputPixelTiers?: Array<{ maxPixels: number | null; price: number | null }>;
   /** 规则级输入媒体计费（图片/视频输入附加费默认值） */
   inputPricing?: InputPricing | null;
 }

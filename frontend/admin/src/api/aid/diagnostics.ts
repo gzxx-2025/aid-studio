@@ -9,8 +9,13 @@ export interface DiagnosticSettings {
   application?: DiagnosticApplication; metadataError?: string;
   metadata?: { supportEgressIps: string[]; expiresAt: string };
 }
-export interface DiagnosticEvent { eventId: string; requestId: string; requestTime: string; source: string; reportId?: string; deliveryStatus?: string; deliveryMessage?: string }
-export interface Verification { status: string; verificationId?: string; message?: string }
+export interface DiagnosticEvent {
+  eventId: string; requestId: string; requestTime: string; source: string;
+  reportId?: string; deliveryStatus?: string; deliveryMessage?: string;
+  handlingStatus?: 'loading' | 'pending' | 'processing' | 'done' | 'refused' | 'unable' | 'unknown' | null;
+  handlingNote?: string | null; handlingUpdatedAt?: string | null;
+}
+export interface Verification { status: string; verificationId?: string; message?: string; errorCode?: string }
 
 const inFlight = new Map<string, Promise<unknown>>();
 function call<T>(method: 'get' | 'post' | 'put', path: string, data?: unknown, signal?: AbortSignal, timeout?: number): Promise<T> {

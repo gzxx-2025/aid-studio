@@ -150,6 +150,14 @@ export default function SkuEditor({
   const enabledSkuCount = data.skuList.filter((sku) => sku.enabled).length;
   const pricedSkuCount = data.skuList.filter((sku) => sku.enabled
     && isSkuMainPriceConfigured(sku as unknown as Record<string, unknown>, mt)).length;
+  const pixelTiers = data.imageOutputPixelTiers || [];
+  const pixelTierInvalid = pixelTiers.length > 0 && (pixelTiers.some((tier, index) =>
+    tier.price == null || tier.price < 0 || (index < pixelTiers.length - 1
+      ? tier.maxPixels == null || tier.maxPixels <= 0
+        || (index > 0 && tier.maxPixels <= (pixelTiers[index - 1].maxPixels || 0))
+      : tier.maxPixels != null))
+    || pixelTiers.some((tier) => (tier.price || 0) > Math.max(0, ...data.skuList
+      .filter((sku) => sku.enabled).map((sku) => Number(sku.price || 0)))));
   const [matchDlgOpen, setMatchDlgOpen] = useState(false);
   const [matchTargetIdx, setMatchTargetIdx] = useState<number | null>(null);
   const [matchNewKey, setMatchNewKey] = useState('');
@@ -395,6 +403,52 @@ export default function SkuEditor({
           <Button size="small" type="primary" icon={<PlusOutlined />} onClick={addSku}>添加SKU</Button>
         </Space>
       </div>
+      {modelType === 'image' && mt === 'PER_IMAGE' && (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <Space wrap style={{ marginBottom: pixelTiers.length ? 10 : 0 }}>
+            <strong>按每张实际输出像素结算</strong>
+            <Button size="small" disabled={data.parseError} onClick={() => update({
+              imageOutputPixelTiers: pixelTiers.length ? [] : [
+                { maxPixels: 2610000, price: null }, { maxPixels: null, price: null }
+              ]
+            })}>{pixelTiers.length ? '关闭阶梯价' : '启用阶梯价'}</Button>
+          </Space>
+          {pixelTiers.length > 0 && <>
+            <div style={{ color: '#64748b', marginBottom: 10 }}>
+              按供应商实际返回的每张图片尺寸计费；上方 SKU 单张价应为最高档，用于最多输出张数的预冻结。
+            </div>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              {pixelTiers.map((tier, index) => <Space key={index} wrap align="end">
+                <Field label={`档位 ${index + 1} · 像素上限`} width={170}>
+                  {index === pixelTiers.length - 1 ? <Input value="以上像素" disabled /> :
+                    <InputNumber aria-label={`档位 ${index + 1} 像素上限`} min={1} precision={0}
+                      value={tier.maxPixels} style={{ width: '100%' }}
+                      onChange={(value) => update({ imageOutputPixelTiers: pixelTiers.map((item, i) =>
+                        i === index ? { ...item, maxPixels: value } : item) })} />}
+                </Field>
+                <Field label="基础价（元／张）" width={170}>
+                  <InputNumber aria-label={`档位 ${index + 1} 基础价`} min={0} precision={6}
+                    value={tier.price} style={{ width: '100%' }}
+                    onChange={(value) => update({ imageOutputPixelTiers: pixelTiers.map((item, i) =>
+                      i === index ? { ...item, price: value } : item) })} />
+                </Field>
+                {index < pixelTiers.length - 1 && <Button size="small" danger
+                  onClick={() => update({ imageOutputPixelTiers: pixelTiers.filter((_, i) => i !== index) })}>移除</Button>}
+              </Space>)}
+              <Button size="small" disabled={data.parseError} onClick={() => update({
+                imageOutputPixelTiers: [
+                  ...pixelTiers.slice(0, -1),
+                  { maxPixels: (pixelTiers[pixelTiers.length - 2]?.maxPixels || 0) + 1000000, price: null },
+                  pixelTiers[pixelTiers.length - 1]
+                ]
+              })}>增加档位</Button>
+            </Space>
+            {pixelTierInvalid && <Alert type="error" showIcon style={{ marginTop: 10 }}
+              message="阶梯价格不完整"
+              description="各档像素上限必须递增，最后一档为以上像素；每档填写价格，且不得高于已启用 SKU 的最高单张预冻结价。" />}
+          </>}
+        </div>
+      )}
       {coverage && (
         <div style={{ marginBottom: 12, padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc' }}>
           <Space wrap>
