@@ -99,7 +99,7 @@ public final class OpenAiStyleChatStream {
         }
         HttpResponse<String> resp;
         try {
-            resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("非流式文本请求被中断, url={}", url, e);
@@ -396,7 +396,7 @@ public final class OpenAiStyleChatStream {
         }
         HttpResponse<InputStream> resp;
         try {
-            resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofInputStream());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             callbacks.onError("请求被中断", e);
@@ -664,6 +664,6 @@ public final class OpenAiStyleChatStream {
                 builder.header(name, value);
             }
         }
-        return builder.POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8)).build();
+        return builder.POST(HttpRequest.BodyPublishers.ofString(com.aid.diagnostics.DiagnosticCapture.outboundBody(jsonBody), StandardCharsets.UTF_8)).build();
     }
 }

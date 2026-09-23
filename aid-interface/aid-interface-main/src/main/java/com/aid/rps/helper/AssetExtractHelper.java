@@ -1708,6 +1708,7 @@ public class AssetExtractHelper
 
     private String loadPromptByName(String promptName, boolean writeCache)
     {
+        com.aid.diagnostics.DiagnosticCapture.promptSource(promptName);
         if (StrUtil.isBlank(promptName))
         {
             log.error("提示词加载失败：agentCode 为空");

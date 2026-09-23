@@ -235,12 +235,25 @@
       padding: 10px 6px;
     }
     .app-sidebar__menu {
+      // 内联子菜单可能仍保留上一次展开状态；折叠栏只保留一级入口，
+      // 可操作的子菜单由 antd 在侧栏外部的悬浮层中渲染。
+      .ant-menu-sub {
+        display: none !important;
+      }
+
       .ant-menu-item,
       .ant-menu-submenu-title {
         padding-inline: 0 !important;
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+
+      // 悬浮层不在当前节点内。只隐藏折叠轨里的一级标题，并提高
+      // 优先级覆盖 antd 的 inlineCollapsed 宽度占位，避免把图标挤出视口。
+      > .ant-menu-item .ant-menu-title-content,
+      > .ant-menu-submenu > .ant-menu-submenu-title .ant-menu-title-content {
+        display: none !important;
       }
     }
   }

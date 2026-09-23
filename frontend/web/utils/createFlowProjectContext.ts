@@ -9,7 +9,6 @@ import {
   isCreateFlowEmbeddedLibraryPanel,
   withCreateFlowFromQuery
 } from '~/utils/createFlowRoutes'
-import { resetProjectDetailHydrateCache } from '~/utils/hydrateCreationStoreFromProjectDetail'
 
 type CreationStore = ReturnType<typeof useCreationStore>
 
@@ -171,7 +170,8 @@ export async function clearStaleCreateFlowProjectContext(options: {
   keepEmbeddedPanel?: boolean
 }): Promise<void> {
   const { router, route, store, keepEmbeddedPanel = true } = options
-  resetProjectDetailHydrateCache()
+  // 保留短时失败缓存：页面与壳层可能先后收到同一个不存在项目的错误，
+  // 此处清空缓存会让稍后的回显再次请求相同 projectId。
   store.setCurrentProjectContext({ projectId: null, episodeId: null })
 
   const nextQuery: Record<string, string> = {}

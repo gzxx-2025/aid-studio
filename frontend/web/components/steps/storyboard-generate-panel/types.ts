@@ -30,6 +30,8 @@ export interface StoryboardGeneratePanelProps {
   sceneFileName?: string
   prompt: string
   promptPlaceholder?: string
+  /** 当前所选模型的提示词字符上限；模型未配置时由调用方传业务默认值。 */
+  promptMaxLength?: number
   sceneImages: any[]
   characterImages: any[]
   propImages: any[]
@@ -170,6 +172,7 @@ export type ResolvedStoryboardGeneratePanelProps = StoryboardGeneratePanelProps 
   referenceVideos: any[]
   imageToVideoReferenceImages: any[]
   referenceImportLabel: string
+  promptMaxLength: number
 }
 
 /** 原 defineExpose 契约（forwardRef + useImperativeHandle） */

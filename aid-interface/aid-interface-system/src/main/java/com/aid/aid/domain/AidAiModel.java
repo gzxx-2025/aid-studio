@@ -96,6 +96,12 @@ public class AidAiModel extends BaseEntity implements Serializable
     /** 是否免费：0收费，1免费 */
     private Boolean isFree;
 
+    /** 是否为该模型的上游图片输入启用代理 URL 模板。 */
+    private Boolean imageUrlProxyEnabled;
+
+    /** 图片代理 URL 模板；启用时必须且只能包含一个 {url} 占位符。 */
+    private String imageUrlProxyTemplate;
+
     /** 模型接口路径，包含所需的API版本前缀 */
     @Excel(name = "模型接口路径")
     private String apiSuffix;

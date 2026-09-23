@@ -13,6 +13,7 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.aid.aid.support.ModelInputRequirementResolver;
+import com.aid.aid.support.ModelImageUrlProxyTemplate;
 import com.aid.common.exception.ServiceException;
 import com.aid.common.utils.DateUtils;
 import com.aid.common.utils.SecurityUtils;
@@ -162,6 +163,11 @@ public class AidAiModelServiceImpl extends ServiceImpl<AidAiModelMapper, AidAiMo
         ModelConfigurationMerge.validate(aidAiModel.getCapabilityJson());
         ModelConfigurationMerge.validate(aidAiModel.getBillingRuleJson());
         aidAiModel.setConfigVersion(0L);
+        if (aidAiModel.getImageUrlProxyEnabled() == null) {
+            aidAiModel.setImageUrlProxyEnabled(Boolean.FALSE);
+        }
+        aidAiModel.setImageUrlProxyTemplate(ModelImageUrlProxyTemplate.normalizeAndValidate(
+                aidAiModel.getImageUrlProxyEnabled(), aidAiModel.getImageUrlProxyTemplate()));
         validateModelCodeNotBlank(aidAiModel.getModelCode());
         validateAndNormalizeApiSuffix(aidAiModel);
         ModelBillingActivationValidator.validateIfRequiredAndEnabled(aidAiModel);
@@ -194,7 +200,8 @@ public class AidAiModelServiceImpl extends ServiceImpl<AidAiModelMapper, AidAiMo
                 Wrappers.<AidAiModel>lambdaQuery()
                         .select(AidAiModel::getId, AidAiModel::getStatus, AidAiModel::getBillingMode,
                                 AidAiModel::getBillingRuleJson, AidAiModel::getCostCredits,
-                                AidAiModel::getCapabilityJson, AidAiModel::getConfigVersion)
+                                AidAiModel::getCapabilityJson, AidAiModel::getConfigVersion,
+                                AidAiModel::getImageUrlProxyEnabled, AidAiModel::getImageUrlProxyTemplate)
                         .eq(AidAiModel::getId, aidAiModel.getId())
                         .last("limit 1"),
                 false);
@@ -214,6 +221,15 @@ public class AidAiModelServiceImpl extends ServiceImpl<AidAiModelMapper, AidAiMo
         if (aidAiModel.getBillingRuleJson() != null) {
             aidAiModel.setBillingRuleJson(ModelConfigurationMerge.merge(
                     before.getBillingRuleJson(), aidAiModel.getBillingRuleJson()));
+        }
+        Boolean effectiveProxyEnabled = aidAiModel.getImageUrlProxyEnabled() == null
+                ? before.getImageUrlProxyEnabled() : aidAiModel.getImageUrlProxyEnabled();
+        String effectiveProxyTemplate = aidAiModel.getImageUrlProxyTemplate() == null
+                ? before.getImageUrlProxyTemplate() : aidAiModel.getImageUrlProxyTemplate();
+        String normalizedProxyTemplate = ModelImageUrlProxyTemplate.normalizeAndValidate(
+                effectiveProxyEnabled, effectiveProxyTemplate);
+        if (aidAiModel.getImageUrlProxyTemplate() != null) {
+            aidAiModel.setImageUrlProxyTemplate(normalizedProxyTemplate);
         }
         AidAiModel effective = mergeBillingFields(before, aidAiModel);
         // 明确声明严格计费的模型，只要保存后的有效配置仍为启用态，就持续校验；因此已启用后清空

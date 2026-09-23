@@ -19,6 +19,8 @@ export default function ModelRouteCapabilityEditor({ definition, route, modelTyp
   // 常用控件只修改明确编辑的字段，避免对整份能力 JSON 做无关的默认值归一化。
   const patchCapability = (patch: Record<string, ConfigValue>) => { if (!cap.parseError) onChange({ capability: { ...route.capability, ...patch } }); };
   const sizes = Array.from(new Set(['480P', '720P', '1080P', '2K', '4K', ...cap.sizeOptions]));
+  const durations = Array.from(new Set([5, 10, 15, ...cap.durationOptions].map(Number)))
+    .filter(Number.isFinite).sort((a, b) => a - b);
   return <>
     {(modelType === 'video' || modelType === 'image') && <section className="model-capability-quick" aria-label="常用能力配置">
       <h3>常用能力配置</h3>
@@ -42,22 +44,23 @@ export default function ModelRouteCapabilityEditor({ definition, route, modelTyp
       {modelType === 'video' && <>
         <div className="model-capability-quick__field">
           <strong>视频时长（秒）</strong>
-          <Checkbox.Group disabled={cap.parseError} aria-label="视频时长（秒）" options={Array.from(new Set([5, 10, 15, ...cap.durationOptions]))}
-            value={cap.durationOptions} onChange={(values) => patchCapability({ durationOptions: [
-              ...cap.durationOptions.filter((value) => values.includes(value)),
-              ...values.filter((value) => !cap.durationOptions.includes(value))
-            ] })} />
+          <Checkbox.Group disabled={cap.parseError} aria-label="视频时长（秒）" options={durations}
+            value={cap.durationOptions} onChange={(values) => patchCapability({
+              durationOptions: Array.from(new Set(values.map(Number))).sort((a, b) => a - b)
+            })} />
         </div>
         <Space wrap size={[24, 12]}>
           <label>音画同步 / 生成声音 <Switch disabled={cap.parseError} aria-label="音画同步 / 生成声音" checkedChildren="支持" unCheckedChildren="不支持"
             checked={cap.supportsAudio === true} onChange={(enabled) => patchCapability(enabled ? { supportsAudio: true }
-              : { supportsAudio: false, defaultAudio: false, supportsBgm: false, supportsVoiceId: false, supportsVoiceControl: false, audioTypes: [] })} /></label>
+              : { supportsAudio: false, defaultAudio: false, supportsBgm: false, supportsVoiceControl: false, audioTypes: [] })} /></label>
           <label>默认生成声音 <Select aria-label="默认生成声音" allowClear style={{ width: 150 }} disabled={cap.parseError || !cap.supportsAudio}
             value={cap.defaultAudio ?? undefined} placeholder="未配置"
             options={[{ value: true, label: '默认开启' }, { value: false, label: '默认关闭' }]}
             onChange={(value) => patchCapability({ defaultAudio: value ?? null })} /></label>
-          <label>参考音频 <Switch disabled={cap.parseError} aria-label="支持参考音频" checkedChildren="支持" unCheckedChildren="不支持"
+          <label>参考音频文件 <Switch disabled={cap.parseError} aria-label="支持参考音频文件" checkedChildren="支持" unCheckedChildren="不支持"
             checked={cap.supportsReferenceAudio === true} onChange={(enabled) => patchCapability({ supportsReferenceAudio: enabled })} /></label>
+          <label>参考音色 ID <Switch disabled={cap.parseError} aria-label="支持参考音色 ID" checkedChildren="支持" unCheckedChildren="不支持"
+            checked={cap.supportsVoiceId === true} onChange={(enabled) => patchCapability({ supportsVoiceId: enabled })} /></label>
           <label>视频输入 <Switch disabled={cap.parseError} aria-label="支持视频输入" checkedChildren="支持" unCheckedChildren="不支持"
             checked={cap.supportsVideoInput === true} onChange={(enabled) => patchCapability({ supportsVideoInput: enabled })} /></label>
         </Space>

@@ -392,6 +392,7 @@ export function VideoConfigPanel({ ctx }: { ctx: VideoModalCtx }) {
                   savePromptLoading={ctx.isSavingVideoPrompt.value}
                   extraPromptAssets={ctx.resolvedVideoPromptAssets.value}
                   prompt={ctx.imageToVideoPrompt.value}
+                  promptMaxLength={ctx.activeVideoPromptMaxLength(ctx.imageToVideoPromptPlain())}
                   onPromptChange={ctx.handleImageToVideoPromptEditorChange}
                   promptPlaceholder={PROMPT_PLACEHOLDER}
                   isSettingExpanded={ctx.isImageToVideoSettingExpanded.value}
@@ -448,6 +449,7 @@ export function VideoConfigPanel({ ctx }: { ctx: VideoModalCtx }) {
                   generatePromptLoading={ctx.showGeneratingMultiParamPromptForScene()}
                   promptBillingRequest={promptQuoteRequest}
                   prompt={ctx.multiParamPrompt.value}
+                  promptMaxLength={ctx.activeVideoPromptMaxLength(ctx.multiParamPromptPlain())}
                   onPromptChange={ctx.handleMultiParamPromptEditorChange}
                   extraPromptAssets={ctx.resolvedMultiParamPromptAssets.value}
                   promptPlaceholder={PROMPT_PLACEHOLDER}
@@ -513,6 +515,7 @@ export function VideoConfigPanel({ ctx }: { ctx: VideoModalCtx }) {
                   showScriptFileHeader={false}
                   showGeneratePromptButton={false}
                   prompt={ctx.edgeVideoPrompt.value}
+                  promptMaxLength={ctx.activeVideoPromptMaxLength(ctx.edgeVideoPromptPlain())}
                   onPromptChange={ctx.handleEdgeVideoPromptEditorChange}
                   promptPlaceholder={PROMPT_PLACEHOLDER}
                   isSettingExpanded={ctx.isEdgeVideoSettingExpanded.value}

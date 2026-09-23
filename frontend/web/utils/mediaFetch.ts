@@ -1,3 +1,4 @@
+import { diagnosticFetch } from '~/utils/errorDiagnostics'
 import {
 isRejectedMediaContentType,
 isUsableMediaBlob
@@ -37,7 +38,7 @@ export function resolveMediaPlaybackUrl(url: string): string {
 
 async function tryFetchMediaBlob(href: string, init?: RequestInit): Promise<Blob | null> {
   try {
-    const res = await fetch(href, init)
+    const res = await diagnosticFetch(href, init)
     if (!res.ok) return null
     const contentType = res.headers.get('content-type')
     // 静态站 SPA 回退常把 /media/proxy 指到 index.html（仍是 200）

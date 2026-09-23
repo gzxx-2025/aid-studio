@@ -51,8 +51,17 @@ public final class ReferenceMediaRequestNormalizer {
                 configuredLimit(modelConfig, KEY_MAX_REFERENCE_IMAGES, providerFallbackMaxImages),
                 modelConfig, "参考图");
 
-        // 所有图片 Provider 都读取 referenceImages；收敛为单一载体可避免顶层与两个列表重复计数/下发。
-        request.setReferenceImageUrl(null);
+        // 图片编辑的第一张图具有“被编辑原图”的固定语义，必须独立保留，不能在归一化时
+        // 混入普通参考图列表。这样蒙版、扩图几何校验及异步结果保护始终指向同一原图。
+        boolean imageEdit = Set.of("image_edit", "image_inpainting", "image_outpainting")
+                .contains(StrUtil.blankToDefault(request.getCapabilityCode(), "").trim().toLowerCase());
+        String source = StrUtil.trim(request.getReferenceImageUrl());
+        if (imageEdit && StrUtil.isNotBlank(source)) {
+            request.setReferenceImageUrl(source);
+            normalized.removeIf(source::equals);
+        } else {
+            request.setReferenceImageUrl(null);
+        }
         options.remove("images");
         putListOrRemove(options, "referenceImages", normalized);
         request.setOptions(options.isEmpty() ? null : options);

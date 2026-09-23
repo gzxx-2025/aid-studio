@@ -124,11 +124,11 @@ public class GeminiTextProviderClient implements TextProviderClient {
                 .timeout(Duration.ofMinutes(HTTP_TIMEOUT_MINUTES))
                 .header(GeminiConstants.HEADER_API_KEY, apiKey)
                 .header(HttpConstants.HEADER_CONTENT_TYPE, HttpConstants.CONTENT_TYPE_JSON)
-                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(com.aid.diagnostics.DiagnosticCapture.outboundBody(json), StandardCharsets.UTF_8))
                 .build();
         HttpResponse<Stream<String>> resp;
         try {
-            resp = client.send(req, HttpResponse.BodyHandlers.ofLines());
+            resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofLines());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             callbacks.onError("请求被中断", e);
@@ -230,11 +230,11 @@ public class GeminiTextProviderClient implements TextProviderClient {
                 .timeout(Duration.ofMinutes(HTTP_TIMEOUT_MINUTES))
                 .header(GeminiConstants.HEADER_API_KEY, apiKey)
                 .header(HttpConstants.HEADER_CONTENT_TYPE, HttpConstants.CONTENT_TYPE_JSON)
-                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(com.aid.diagnostics.DiagnosticCapture.outboundBody(json), StandardCharsets.UTF_8))
                 .build();
         HttpResponse<String> resp;
         try {
-            resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return ProviderSubmitResult.builder().rawResponse("请求被中断").build();
@@ -791,6 +791,7 @@ public class GeminiTextProviderClient implements TextProviderClient {
                 String line = StringUtils.defaultString(iterator.next());
                 int nextBytes = line.getBytes(StandardCharsets.UTF_8).length + 1;
                 if (nextBytes > MAX_ERROR_BODY_BYTES - bytes) {
+                    if (com.aid.diagnostics.DiagnosticCapture.current() != null) while (iterator.hasNext()) iterator.next();
                     return null;
                 }
                 if (!result.isEmpty()) {

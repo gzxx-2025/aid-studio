@@ -67,6 +67,7 @@ public class ResourcesConfig implements WebMvcConfigurer
         config.addAllowedOriginPattern("*");
         // 设置访问源请求头
         config.addAllowedHeader("*");
+        config.addExposedHeader("X-AID-Request-ID");
         // 设置访问源请求方法
         config.addAllowedMethod("*");
         // 有效期 1800秒

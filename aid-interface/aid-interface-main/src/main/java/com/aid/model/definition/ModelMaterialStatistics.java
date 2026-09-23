@@ -71,6 +71,8 @@ public final class ModelMaterialStatistics {
         for (ModelParameter field : fields) {
             Object value = values.get(field.getName());
             if (value == null) continue;
+            // 蒙版只定义编辑区域，不属于计费/能力规则中的参考素材数量。
+            if ("mask".equals(field.getMaterialRole())) continue;
             if (field.getMaterialRole() != null) {
                 String type = "reference_video".equals(field.getMaterialRole()) ? "video"
                         : "reference_audio".equals(field.getMaterialRole()) ? "audio" : "image";

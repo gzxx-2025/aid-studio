@@ -32,6 +32,14 @@ describe('storyboard video prompt validation', () => {
     }
   })
 
+  it('uses the selected model character limit when it is supplied', () => {
+    expect(validateImageToVideoPromptPlain('abc', 3)).toEqual({ ok: true })
+    expect(validateImageToVideoPromptPlain('abcd', 3)).toEqual({
+      ok: false,
+      message: '提示词过长'
+    })
+  })
+
   it('keeps required prompts non-empty while allowing an empty edge prompt', () => {
     for (const validate of requiredValidators) {
       expect(validate(' \n ')).toEqual({

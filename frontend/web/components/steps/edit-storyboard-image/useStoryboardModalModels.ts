@@ -29,6 +29,8 @@ import {
 import { buildAidAgentListScopeParams } from '~/utils/createFlowProjectContext'
 import { advanceGenerationToken, replaceRefValue } from '~/utils/generationToken'
 import type { SelectOption } from '~/utils/modelCapability'
+import type { UserModelListItem } from '~/types/business-api'
+import { findModelByReference } from '~/utils/modelReference'
 import type { EditStoryboardImageModalCtx } from './types'
 
 const fallbackModelOptions: ModelOption[] = [
@@ -80,7 +82,9 @@ export interface StoryboardModalModelsApi {
   multiViewModelOptions: ModelOption[]
   nineGridModelOptions: ModelOption[]
   selectedModel: () => ModelOption
+  selectedRawModel: () => UserModelListItem | null
   dialogueSelectedModel: () => ModelOption
+  dialogueSelectedRawModel: () => UserModelListItem | null
   multiViewSelectedModel: () => ModelOption
   nineGridSelectedModel: () => ModelOption
   aspectRatioSelectOptions: SelectOption<string>[]
@@ -124,6 +128,9 @@ export function useStoryboardModalModels(
 
   const selectedModel = () =>
     resolveSelectedModelOption(getModelOptions(), ctx.generationSettings.get().model)
+
+  const selectedRawModel = (): UserModelListItem | null =>
+    findModelByReference(getRawModelList(), ctx.generationSettings.get().model)
 
   const {
     aspectRatioSelectOptions,
@@ -175,6 +182,9 @@ export function useStoryboardModalModels(
 
   const dialogueSelectedModel = () =>
     resolveSelectedModelOption(getDialogueModelOptions(), ctx.dialogueSettings.get().model)
+
+  const dialogueSelectedRawModel = (): UserModelListItem | null =>
+    findModelByReference(getDialogueRawModelList(), ctx.dialogueSettings.get().model)
 
   const {
     aspectRatioSelectOptions: dialogueAspectRatioSelectOptions,
@@ -438,7 +448,9 @@ export function useStoryboardModalModels(
     multiViewModelOptions,
     nineGridModelOptions,
     selectedModel,
+    selectedRawModel,
     dialogueSelectedModel,
+    dialogueSelectedRawModel,
     multiViewSelectedModel,
     nineGridSelectedModel,
     aspectRatioSelectOptions,

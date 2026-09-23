@@ -235,6 +235,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         vo.setBillingRuleJson(model.getBillingRuleJson());
         vo.setBillingVersion(model.getBillingVersion());
         vo.setIsFree(Boolean.TRUE.equals(model.getIsFree()));
+        vo.setImageUrlProxyEnabled(Boolean.TRUE.equals(model.getImageUrlProxyEnabled()));
+        vo.setImageUrlProxyTemplate(model.getImageUrlProxyTemplate());
         // 服务商字段（已处理用户覆盖）
         vo.setBaseUrl(effectiveBaseUrl);
         vo.setApiKey(effectiveApiKey);

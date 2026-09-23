@@ -150,6 +150,7 @@ service.interceptors.response.use(
     return res.data as any;
   },
   (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     let msg = error?.message || '请求失败';
     if (msg === 'Network Error') msg = '后端接口连接异常';
     else if (msg.includes('timeout')) msg = '系统接口请求超时';

@@ -352,7 +352,7 @@ public class GeminiImageProviderClient implements ImageProviderClient {
                 .timeout(Duration.ofMillis(IMAGE_DOWNLOAD_READ_TIMEOUT_MS))
                 .GET()
                 .build();
-        HttpResponse<InputStream> resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofInputStream());
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             throw new IOException("HTTP " + resp.statusCode());
         }
@@ -538,11 +538,11 @@ public class GeminiImageProviderClient implements ImageProviderClient {
                 .timeout(Duration.ofMillis(timeoutMs))
                 .header(GeminiConstants.HEADER_API_KEY, apiKey)
                 .header(HttpConstants.HEADER_CONTENT_TYPE, HttpConstants.CONTENT_TYPE_JSON)
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(com.aid.diagnostics.DiagnosticCapture.outboundBody(jsonBody), StandardCharsets.UTF_8))
                 .build();
         HttpResponse<String> resp;
         try {
-            resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            resp = com.aid.diagnostics.DiagnosticHttp.send(client, req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("请求被中断", ie);

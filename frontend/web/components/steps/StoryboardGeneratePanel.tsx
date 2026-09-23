@@ -65,7 +65,8 @@ export const StoryboardGeneratePanel = forwardRef<
     referenceAudios: rawProps.referenceAudios ?? [],
     referenceVideos: rawProps.referenceVideos ?? [],
     imageToVideoReferenceImages: rawProps.imageToVideoReferenceImages ?? [],
-    referenceImportLabel: rawProps.referenceImportLabel ?? '导入参考图'
+    referenceImportLabel: rawProps.referenceImportLabel ?? '导入参考图',
+    promptMaxLength: rawProps.promptMaxLength ?? EDIT_ASSET_PROMPT_MAX_CHARS
   }
   /** 事件回调 / 异步流程内一律读最新 props，避免闭包捕获旧值 */
   const propsRef = useRef(props)
@@ -489,7 +490,8 @@ export const StoryboardGeneratePanel = forwardRef<
                   placeholder={props.promptPlaceholder}
                   minHeight={promptHeightExpanded}
                   maxHeight={promptHeightExpanded}
-                  maxLength={EDIT_ASSET_PROMPT_MAX_CHARS}
+                  maxLength={props.promptMaxLength}
+                  showCount
                   enablePromptAssetRefs={enablePromptAssetRefs}
                   promptAssets={storyboardPromptAssets}
                   enablePromptParamRefs={enablePromptParamRefs}
@@ -569,7 +571,8 @@ export const StoryboardGeneratePanel = forwardRef<
             value={props.prompt}
             placeholder={props.promptPlaceholder}
             minHeight="120px"
-            maxLength={EDIT_ASSET_PROMPT_MAX_CHARS}
+            maxLength={props.promptMaxLength}
+            showCount
             enablePromptAssetRefs={enablePromptAssetRefs}
             promptAssets={storyboardPromptAssets}
             enablePromptParamRefs={enablePromptParamRefs}
@@ -603,7 +606,8 @@ export const StoryboardGeneratePanel = forwardRef<
             placeholder={props.promptPlaceholder}
             minHeight={promptHeightCollapsed}
             maxHeight={promptHeightCollapsed}
-            maxLength={EDIT_ASSET_PROMPT_MAX_CHARS}
+            maxLength={props.promptMaxLength}
+            showCount
             enablePromptAssetRefs={enablePromptAssetRefs}
             promptAssets={storyboardPromptAssets}
             enablePromptParamRefs={enablePromptParamRefs}

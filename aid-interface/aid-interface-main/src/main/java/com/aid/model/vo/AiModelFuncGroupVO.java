@@ -31,6 +31,9 @@ public class AiModelFuncGroupVO implements Serializable
     /** 生成模式：如 image_edit/image_upscale/text_to_image；无配置时为 null */
     private String generateMode;
 
+    /** 该业务池按配置顺序选出的默认可用模型编码；无可用模型时为 null。 */
+    private String defaultModelCode;
+
     /** 该功能（场景）下可用的模型列表，按配置顺序；无可用模型时为空数组 */
     private List<AiModelVO> models = new ArrayList<>();
 }

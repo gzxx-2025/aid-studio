@@ -36,6 +36,18 @@
             <artifactId>volcengine-java-sdk-ark-runtime</artifactId>
             <version>2.0.23</version>
         </dependency>
+        <!-- ImageIO WebP 解码器：编辑蒙版允许 PNG/JPEG/WebP，输出仍统一为 PNG。 -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>3.12.0</version>
+        </dependency>
+        <!-- 读取并规范化素材 EXIF 方向，避免浏览器显示方向与服务端蒙版坐标不一致。 -->
+        <dependency>
+            <groupId>com.drewnoakes</groupId>
+            <artifactId>metadata-extractor</artifactId>
+            <version>2.19.0</version>
+        </dependency>
 
     </dependencies>
 

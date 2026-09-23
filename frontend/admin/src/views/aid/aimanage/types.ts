@@ -79,6 +79,10 @@ export interface Model {
   configVersion?: number;
   /** 是否免费；缺省为正常计费 */
   isFree?: boolean;
+  /** 是否将该模型的上游图片输入按代理 URL 模板拼接 */
+  imageUrlProxyEnabled?: boolean;
+  /** 图片代理 URL 模板；启用时必须且只能包含一个 {url} */
+  imageUrlProxyTemplate?: string | null;
   meterType?: string;
   imageRefine?: number | null;
   supportsTextInput?: boolean;

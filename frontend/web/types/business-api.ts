@@ -2766,6 +2766,10 @@ export interface UserModelCapability {
   defaultOutputCount?: number
   durationOptions?: number[]
   defaultDurationSeconds?: number
+  /** 提示词最大字符数；服务端按 Java String.length() 校验。 */
+  maxPromptCharacters?: number
+  /** 提示词包含中日韩文字时的最大字符数；缺失时回退 maxPromptCharacters。 */
+  maxPromptCharactersCjk?: number
   /** 是否支持音画同出；视频模型必返，未配置为 false */
   supportsAudio?: boolean
   /** 是否支持外部参考音频（音色克隆参考）；视频模型必返，缺失视为 false */

@@ -7,6 +7,7 @@ import './DialogueDrawPanel.css'
 import GenerateModelConfigBlock from './GenerateModelConfigBlock'
 import GenerateSourceImagesStrip from './GenerateSourceImagesStrip'
 import ModelSelectDropdown from './ModelSelectDropdown'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
 
 type DialogueSourceType = 'storyboard' | 'asset'
 type DialogueSourceImage = { url: string; title?: string }
@@ -24,6 +25,7 @@ export interface DialogueDrawPanelProps {
   aspectRatioOptions?: SelectOption<string>[]
   countOptions?: SelectOption<number>[]
   qualityOptions?: SelectOption<string>[]
+  promptMaxLength?: number
   /** 参考图上限；分镜对话作图接口仅允许 1 张 */
   maxSourceCount?: number
   onRemoveSourceImage: (index: number) => void
@@ -49,6 +51,7 @@ export function DialogueDrawPanel({
   aspectRatioOptions,
   countOptions,
   qualityOptions,
+  promptMaxLength = EDIT_ASSET_PROMPT_MAX_CHARS,
   maxSourceCount = 4,
   onRemoveSourceImage,
   onOpenSourcePicker,
@@ -78,7 +81,8 @@ export function DialogueDrawPanel({
           value={instructionHtml}
           className="dialogue-instruction"
           placeholder="请输入修改要求，例如：把画面改成夕阳氛围、人物表情更开心、增加气氛光效等"
-          maxLength={2000}
+          maxLength={promptMaxLength}
+          showCount
           onChange={(value: string) => onInstructionHtmlChange(value)}
         />
       </div>

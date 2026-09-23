@@ -354,12 +354,73 @@ public class AiModelBusinessServiceImpl implements IAiModelBusinessService
                     if (referenceView != null) projected = referenceView;
                 }
             }
-            result.add(buildModelVo(projected,
+            AiModelVO item = buildModelVo(projected,
                     providerNameMap.get(model.getProviderId()),
                     providerLogoMap.get(model.getProviderId()),
-                    globalFactor));
+                    globalFactor);
+            Set<String> boundCapabilityCodes = businessBindings.stream()
+                    .filter(binding -> Objects.equals(binding.getModelId(), model.getId()))
+                    .map(com.aid.aid.domain.AidAiBusinessModelBinding::getCapabilityCode)
+                    .filter(StrUtil::isNotBlank)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            if (boundCapabilityCodes.isEmpty() && StrUtil.isNotBlank(selectedCapability))
+            {
+                // 旧业务配置没有标准化 binding 时只暴露已投影的当前能力，不能把模型全部能力误开放给该业务。
+                boundCapabilityCodes.add(selectedCapability);
+            }
+            if (model.getCapabilities() != null)
+            {
+                List<com.aid.model.vo.ModelCapabilityOptionVO> capabilityOptions = new ArrayList<>();
+                for (var capability : model.getCapabilities())
+                {
+                    if (!Boolean.TRUE.equals(capability.getEnabled())
+                            || !boundCapabilityCodes.contains(capability.getCode()))
+                    {
+                        continue;
+                    }
+                    var binding = businessBindings.stream()
+                            .filter(value -> Objects.equals(value.getModelId(), model.getId())
+                                    && Objects.equals(value.getCapabilityCode(), capability.getCode()))
+                            .findFirst();
+                    AidAiModel capabilityProjection = modelDefinitions.project(model, capability.getCode(),
+                            binding.map(com.aid.aid.domain.AidAiBusinessModelBinding::getDefaultsJson).orElse(null));
+                    if (capabilityProjection == null)
+                    {
+                        continue;
+                    }
+                    com.aid.model.vo.ModelCapabilityOptionVO option = new com.aid.model.vo.ModelCapabilityOptionVO();
+                    option.setCode(capability.getCode());
+                    option.setLabel(capability.getLabel());
+                    option.setGenerateMode(capability.getGenerateMode());
+                    var effectiveCapability = capabilityProjection.getCapabilities().stream()
+                            .filter(value -> Objects.equals(value.getCode(), capability.getCode()))
+                            .findFirst().orElse(capability);
+                    option.setParameterSchema(effectiveCapability.getParameters());
+                    option.setParameterRules(effectiveCapability.getRules());
+                    option.setPresentation(clientCapabilityPresentation(effectiveCapability.getPresentation()));
+                    option.setBilling(billingDetailQueryService.buildModelBillingDetail(capabilityProjection,
+                            providerNameMap.get(model.getProviderId()), providerLogoMap.get(model.getProviderId()),
+                            globalFactor));
+                    capabilityOptions.add(option);
+                }
+                item.setAvailableCapabilities(capabilityOptions);
+            }
+            result.add(item);
         }
         return result;
+    }
+
+    /** 仅返回 C 端渲染所需字段，供应商协议及运营路由元数据不得透出。 */
+    private Map<String, Object> clientCapabilityPresentation(Map<String, Object> source)
+    {
+        if (source == null || source.isEmpty()) return null;
+        Set<String> allowed = Set.of("description", "icon", "sort", "tags", "inputRequirement",
+                "supportsImageInput", "supportsMultiImageInput", "maxReferenceImages", "minReferenceImages");
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach((key, value) -> {
+            if (allowed.contains(key)) result.put(key, value);
+        });
+        return result.isEmpty() ? null : result;
     }
 
     /**
@@ -414,6 +475,8 @@ public class AiModelBusinessServiceImpl implements IAiModelBusinessService
         // capability：DB 中的 capability_json 字符串反序列化为结构化对象（前端无需再 JSON.parse）；
         // 解析失败或为空时按 modelType 兜底为推荐结构
         vo.setCapability(parseOrDefaultCapability(model.getModelType(), model.getCapabilityJson()));
+        vo.setMaxPromptCharacters(vo.getCapability().getMaxPromptCharacters());
+        vo.setMaxPromptCharactersCjk(vo.getCapability().getMaxPromptCharactersCjk());
         // 兜底：旧库未跑能力迁移脚本时 13 个顶层能力字段在 DB 全为 NULL，
         // Jackson 全局 default-property-inclusion=non_null 会丢弃 null，前端会拿不到字段。
         // 在此按 modelType 注入合理默认值，保证模型池接口返回的 VO 始终是完整渲染契约。
@@ -677,7 +740,12 @@ public class AiModelBusinessServiceImpl implements IAiModelBusinessService
             group.setFuncName(funcConfig.getFuncName());
             group.setModelType(funcConfig.getModelType());
             group.setGenerateMode(funcConfig.getGenerateMode());
-            group.setModels(resolveModelsByFuncConfig(funcConfig));
+            List<AiModelVO> models = resolveModelsByFuncConfig(funcConfig);
+            group.setModels(models);
+            if (!models.isEmpty())
+            {
+                group.setDefaultModelCode(models.get(0).getModelCode());
+            }
             groups.add(group);
         }
 

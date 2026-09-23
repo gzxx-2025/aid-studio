@@ -11,6 +11,8 @@ runStoryboardEditImageTask
 } from '~/composables/useStoryboardEditImageTask'
 import { isStoryboardImageTaskOngoing } from '~/composables/useStoryboardImageGenerateTask'
 import { storyboardPromptHtmlToPlain } from '~/utils/storyboardPromptAssetRef'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import { modalGenSessionScopeFromScopeKey } from '~/utils/modalGenSessionScope'
 import {
 clearModalImageGenSession,
@@ -101,6 +103,15 @@ export function useStoryboardModalDialogue(
     const prompt = storyboardPromptHtmlToPlain(ctx.dialogueInstructionHtml.get() || '').trim()
     if (!prompt) {
       message.warning('请输入修改要求')
+      return
+    }
+    const promptMaxLength = resolveModelPromptCharacterLimit(
+      ctx.dialogueSelectedRawModel(),
+      prompt,
+      EDIT_ASSET_PROMPT_MAX_CHARS
+    )
+    if (prompt.length > promptMaxLength) {
+      message.warning(`提示词不能超过 ${promptMaxLength.toLocaleString('zh-CN')} 个字符`)
       return
     }
 

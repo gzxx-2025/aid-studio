@@ -226,6 +226,7 @@ export default function ModelTable({ provider, list, loading, query, onQueryChan
         dataSource={list}
         columns={columns}
         scroll={{ x: 1660 }}
+        sticky={{ offsetScroll: 0 }}
         pagination={false}
         rowSelection={canEditPools && poolSnapshotReady ? {
           selectedRowKeys: selectedModelIds,

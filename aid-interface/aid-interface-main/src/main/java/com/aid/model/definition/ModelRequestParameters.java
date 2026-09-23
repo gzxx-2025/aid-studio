@@ -18,7 +18,10 @@ import java.util.Set;
 public final class ModelRequestParameters {
     private static final Map<String, Set<String>> ROOTS = Map.of(
             "text", Set.of("prompt", "messages", "options", "reasoningEnabled", "reasoningLevel", "reasoningBudgetTokens", "includeReasoning"),
-            "image", Set.of("prompt", "size", "negativePrompt", "referenceImageUrl", "options", "expectedImageCount"),
+            "image", Set.of("prompt", "size", "negativePrompt", "referenceImageUrl", "maskImageUrl", "maskEncoding",
+                    "targetWidth", "targetHeight", "sourceX", "sourceY",
+                    "brightness", "colorTemperature", "keyLightAzimuth", "keyLightElevation", "rimLightEnabled",
+                    "rimLightAzimuth", "rimLightElevation", "options", "expectedImageCount"),
             "video", Set.of("prompt", "imageUrl", "durationSeconds", "aspectRatio", "options", "audio", "bgm", "audioType", "voiceId", "referenceAudios", "referenceVideoRecordIds"),
             "audio", Set.of("ttsText", "voiceCode", "language", "emotion", "emotionScale", "speechRate", "loudnessRate", "pitch", "audioFormat", "sampleRate", "enableTimestamp", "options"));
 

@@ -1,3 +1,4 @@
+import { captureStreamFailure, diagnosticFetch } from '~/utils/errorDiagnostics'
 import type {
   UserSkillRuntimeEventView,
   UserSkillRuntimeOutputDelta,
@@ -118,7 +119,7 @@ export async function streamUserSkillRuntimeEvents(input: {
     redirectToLogin()
     throw new Error('AUTH_REDIRECT')
   }
-  const response = await fetch(resolveClientApiUrl('/api/user/skill/execution/run/events/stream'), {
+  const response = await diagnosticFetch(resolveClientApiUrl('/api/user/skill/execution/run/events/stream'), {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
@@ -141,7 +142,10 @@ export async function streamUserSkillRuntimeEvents(input: {
     throw new Error(String(parsed?.msg || parsed?.message || `Skill 事件连接失败（HTTP ${response.status}）`))
   }
   const reader = response.body?.getReader()
-  if (!reader) throw new Error('Skill 事件响应为空')
+  if (!reader) {
+    captureStreamFailure(response, null, new Error('Skill 事件响应为空'))
+    throw new Error('Skill 事件响应为空')
+  }
 
   const handlers: UserSkillRuntimeSseHandlers = {
     onMilestone: input.onMilestone,
@@ -153,6 +157,16 @@ export async function streamUserSkillRuntimeEvents(input: {
 
   const decoder = new TextDecoder()
   let buffer = ''
+  let completed = false
+  const dispatchObserved = (event: string, raw: string) => {
+    const data = parseRecord(raw)
+    const payload = typeof data?.payloadJson === 'string' ? parseRecord(data.payloadJson) : record(data?.payloadJson)
+    const status = String(payload?.status || data?.status || '').toUpperCase()
+    if (event === 'terminal' || event === 'reconnect_required' || event === 'input_required'
+      || (event === 'snapshot' && ['SUCCEEDED', 'FAILED', 'CANCELED', 'CANCELLED'].includes(status))) completed = true
+    if (event === 'error' || status === 'FAILED') captureStreamFailure(response, { event, data: raw })
+    dispatchUserSkillRuntimeSseEvent(event, raw, handlers)
+  }
   try {
     while (!input.signal.aborted) {
       const chunk = await reader.read()
@@ -169,14 +183,18 @@ export async function streamUserSkillRuntimeEvents(input: {
         const block = buffer.slice(0, separator)
         buffer = buffer.slice(separator + 2)
         const parsed = parseSseEventBlock(block)
-        if (parsed) dispatchUserSkillRuntimeSseEvent(parsed.event, parsed.data, handlers)
+        if (parsed) dispatchObserved(parsed.event, parsed.data)
         separator = buffer.indexOf('\n\n')
       }
     }
     if (buffer.trim()) {
       const parsed = parseSseEventBlock(buffer.trim())
-      if (parsed) dispatchUserSkillRuntimeSseEvent(parsed.event, parsed.data, handlers)
+      if (parsed) dispatchObserved(parsed.event, parsed.data)
     }
+    if (!input.signal.aborted && !completed) captureStreamFailure(response, buffer, new Error('Skill 事件流在终态前结束'))
+  } catch (error) {
+    if (!input.signal.aborted) captureStreamFailure(response, buffer, error)
+    throw error
   } finally {
     try {
       await reader.cancel()

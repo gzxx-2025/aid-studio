@@ -1,3 +1,4 @@
+import { diagnosticFetch } from '~/utils/errorDiagnostics'
 /** 合成与导出域：一键配音合成、导出进度、剪辑时间轴、分段素材/成片下载与浏览器保存。 */
 import type {
 ApiEnvelope,
@@ -107,7 +108,7 @@ export async function userEpisodeExportSegmentsZip(
   body: EpisodeSegmentZipDownloadRequest
 ): Promise<{ blob: Blob; filename: string }> {
   const url = resolveClientApiUrl('/api/user/episode/export/segments/zip')
-  const res = await fetch(url, {
+  const res = await diagnosticFetch(url, {
     method: 'POST',
     headers: {
       ...buildUserApiAuthHeaders(),
@@ -176,7 +177,7 @@ export async function userEpisodeExportDownload(
     payload.episodeId = Number.isFinite(episodeId) && episodeId >= 0 ? episodeId : 0
   }
 
-  const res = await fetch(url, {
+  const res = await diagnosticFetch(url, {
     method: 'POST',
     headers: {
       ...buildUserApiAuthHeaders(),

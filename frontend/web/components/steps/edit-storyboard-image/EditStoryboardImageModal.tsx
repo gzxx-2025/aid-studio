@@ -47,6 +47,8 @@ import { MultiAngleCameraModal } from '~/components/steps/MultiAngleCameraModal'
 import { TouchEditModal } from '~/components/steps/TouchEditModal'
 import { assetUrl } from '~/utils/assetUrl'
 import { storyboardPromptHtmlToPlain } from '~/utils/storyboardPromptAssetRef'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import type { BillingQuoteRequest } from '~/types/business-api'
 import {
   resolveStoryboardPromptAgentCode,
@@ -106,6 +108,16 @@ export function EditStoryboardImageModal(props: EditStoryboardImageModalProps) {
       : canvasToolbarIconMap[key].nor
 
   const currentSceneIndex = ctx.currentSceneIndex.value
+  const storyboardPromptMaxLength = resolveModelPromptCharacterLimit(
+    ctx.selectedRawModel(),
+    storyboardPromptHtmlToPlain(ctx.storyboardPrompt.value || ''),
+    EDIT_ASSET_PROMPT_MAX_CHARS
+  )
+  const dialoguePromptMaxLength = resolveModelPromptCharacterLimit(
+    ctx.dialogueSelectedRawModel(),
+    storyboardPromptHtmlToPlain(ctx.dialogueInstructionHtml.value || ''),
+    EDIT_ASSET_PROMPT_MAX_CHARS
+  )
   const currentImageIndex = ctx.currentImageIndex.value
   const currentScene = ctx.currentScene()
   const currentSceneImages = ctx.currentSceneImages()
@@ -626,6 +638,7 @@ export function EditStoryboardImageModal(props: EditStoryboardImageModalProps) {
                               iconType="scene"
                               headerTheme="scene-modal"
                               prompt={ctx.storyboardPrompt.value}
+                              promptMaxLength={storyboardPromptMaxLength}
                               onPromptChange={ctx.handleStoryboardPromptEditorChange}
                               promptPlaceholder="描述想要生成的画面，如：一只可爱的猫咪"
                               sceneImages={ctx.sceneImages.value}
@@ -717,6 +730,7 @@ export function EditStoryboardImageModal(props: EditStoryboardImageModalProps) {
                             maxSourceCount={1}
                             sourceImages={ctx.dialogueSourceImages.value}
                             instructionHtml={ctx.dialogueInstructionHtml.value}
+                            promptMaxLength={dialoguePromptMaxLength}
                             modelValue={ctx.dialogueSelectedModel()}
                             modelOptions={ctx.dialogueModelOptions}
                             modelExpanded={ctx.dialogueModelDropdownExpanded.value}

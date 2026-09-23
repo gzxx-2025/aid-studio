@@ -43,6 +43,30 @@ public class MediaImageGenerateRequest {
     private String referenceImageUrl;
 
     /**
+     * 区域编辑蒙版 URL。该字段只接收业务层完成权限校验后解析出的可信地址，
+     * 不接受 C 端直接传入任意 URL。
+     */
+    private String maskImageUrl;
+
+    /** 蒙版语义：BLACK_WHITE（白色编辑）或 ALPHA（透明区域编辑）。 */
+    private String maskEncoding;
+
+    /** 扩图目标尺寸及原图在目标画布中的位置。 */
+    private Integer targetWidth;
+    private Integer targetHeight;
+    private Integer sourceX;
+    private Integer sourceY;
+
+    /** 灯光编辑参数。是否支持及取值范围由当前模型能力定义校验。 */
+    private Integer brightness;
+    private Integer colorTemperature;
+    private Integer keyLightAzimuth;
+    private Integer keyLightElevation;
+    private Boolean rimLightEnabled;
+    private Integer rimLightAzimuth;
+    private Integer rimLightElevation;
+
+    /**
      * 扩展参数（可选）：厂商差异字段与业务透传。
      */
     private Map<String, Object> options;

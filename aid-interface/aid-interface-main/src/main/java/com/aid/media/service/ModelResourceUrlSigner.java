@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import com.aid.common.aid.oss.core.OssTemplate;
 import com.aid.media.dto.MediaAudioGenerateRequest;
 import com.aid.media.dto.MediaImageGenerateRequest;
+import com.aid.media.dto.MediaTextGenerateRequest;
 import com.aid.media.dto.MediaVideoGenerateRequest;
 import com.aid.media.dto.ReferenceAudioInput;
 import com.aid.media.dto.ReferenceVideoInput;
@@ -33,6 +34,7 @@ public class ModelResourceUrlSigner
             return;
         }
         request.setReferenceImageUrl(signOne(request.getReferenceImageUrl()));
+        request.setMaskImageUrl(signOne(request.getMaskImageUrl()));
         request.setOptions(signMap(request.getOptions()));
     }
 
@@ -69,6 +71,30 @@ public class ModelResourceUrlSigner
         request.setOptions(signMap(request.getOptions(), signedUrls));
     }
 
+    /** 文本多模态只签名显式声明为 image 的内容块。 */
+    public void sign(MediaTextGenerateRequest request)
+    {
+        if (request == null || request.getMessages() == null)
+        {
+            return;
+        }
+        Map<String, String> signedUrls = new LinkedHashMap<>();
+        for (MediaTextGenerateRequest.TextMessageItem message : request.getMessages())
+        {
+            if (message == null || message.getParts() == null)
+            {
+                continue;
+            }
+            for (MediaTextGenerateRequest.TextContentPart part : message.getParts())
+            {
+                if (part != null && "image".equalsIgnoreCase(part.getType()))
+                {
+                    part.setUrl(signOne(part.getUrl(), signedUrls));
+                }
+            }
+        }
+    }
+
     /** 语音模型的厂商扩展参数也可能承载参考音频 URL。 */
     public void sign(MediaAudioGenerateRequest request)
     {
@@ -81,6 +107,12 @@ public class ModelResourceUrlSigner
     private String signOne(String value)
     {
         return ossTemplate.isManagedResourceUrl(value) ? ossTemplate.getModelSignedUrl(value) : value;
+    }
+
+    /** Provider 内部新生成的临时图片也必须经过与普通模型输入相同的存储签名。 */
+    public String signImageUrl(String value)
+    {
+        return signOne(value);
     }
 
     private Map<String, Object> signMap(Map<String, Object> source)

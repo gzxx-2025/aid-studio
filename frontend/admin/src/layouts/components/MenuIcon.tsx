@@ -85,9 +85,12 @@ function renderAntIcon(name: string | undefined, className?: string) {
 }
 
 export default function MenuIcon({ icon, className }: Props) {
-  if (!icon || icon === '#') return null;
+  // 未配置图标的动态菜单也必须在折叠栏保留可识别、可点击的入口，
+  // 否则 antd 会退化为截取标题首字显示。
+  if (!icon || !icon.trim() || icon === '#') {
+    return <AntIcons.AppstoreOutlined className={className} />;
+  }
   const iconName = icon.trim();
-  if (!iconName || iconName === '#') return null;
 
   const mappedIcon = renderAntIcon(fallbackIconMap[iconName.toLowerCase()], className);
   if (mappedIcon) return mappedIcon;

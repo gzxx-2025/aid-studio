@@ -7903,8 +7903,9 @@ public class AssetExtractServiceImpl implements IAssetExtractService, com.aid.rp
             estimated = true;
         }
 
+        String capabilityCode = resolveFormImageCapability(inheritedRefImageUrl, estimated);
         AiModelConfigVo modelConfig = aiModelConfigService.selectForBusiness(modelCode,
-                helper.businessFunctionForAgent(agentCode), null);
+                helper.businessFunctionForAgent(agentCode), capabilityCode);
         ModelCapabilityResolver.ImageSizeSpec sizeSpec = ModelCapabilityResolver.resolveImageSpec(
                 modelConfig, resolution, aspectRatio);
         String finalPrompt = buildFormImagePrompt(
@@ -7949,6 +7950,16 @@ public class AssetExtractServiceImpl implements IAssetExtractService, com.aid.rp
     private record FormImageMediaBillingPlan(MediaImageGenerateRequest request,
             String finalPrompt, String referenceImageUrl, boolean estimated)
     {
+    }
+
+    /**
+     * 角色、场景和道具形态图共用同一业务入口，但请求既可能是纯文生图，也可能继承角色基准图。
+     * 必须根据本次真实素材显式选择能力，不能依赖业务池默认能力。
+     */
+    private String resolveFormImageCapability(String referenceImageUrl, boolean deferredReference)
+    {
+        return StrUtil.isNotBlank(referenceImageUrl) || deferredReference
+                ? "image_to_image" : "text_to_image";
     }
 
     /**
@@ -11426,7 +11437,7 @@ public class AssetExtractServiceImpl implements IAssetExtractService, com.aid.rp
             String aspectRatio, Long userId)
     {
         AiModelConfigVo modelConfig = aiModelConfigService.selectForBusiness(modelCode,
-                helper.businessFunctionForAgent(agentCode), null);
+                helper.businessFunctionForAgent(agentCode), "image_to_image");
         ModelCapabilityResolver.ImageSizeSpec sizeSpec = ModelCapabilityResolver.resolveImageSpec(
                 modelConfig, resolution, aspectRatio);
         String finalPrompt = buildCardImagePrompt(

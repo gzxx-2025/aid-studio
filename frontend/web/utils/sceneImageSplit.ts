@@ -1,3 +1,4 @@
+import { diagnosticFetch } from '~/utils/errorDiagnostics'
 import { withAppBasePath } from '~/utils/appBasePath'
 
 /** 场景四宫格切图顺序：主视、反打、左立面、右立面（左上、右上、左下、右下） */
@@ -148,7 +149,7 @@ async function fetchImageBlobDirect(imageUrl: string): Promise<Blob> {
   const sameOrigin =
     typeof window !== 'undefined' && new URL(url).origin === window.location.origin
 
-  const res = await fetch(url, {
+  const res = await diagnosticFetch(url, {
     mode: sameOrigin ? 'same-origin' : 'cors',
     credentials: 'omit',
     referrerPolicy: 'no-referrer'
@@ -166,7 +167,7 @@ async function fetchImageBlobDirect(imageUrl: string): Promise<Blob> {
 async function fetchImageBlobViaSameOriginProxy(imageUrl: string): Promise<Blob> {
   const params = new URLSearchParams({ url: resolveAbsoluteImageUrl(imageUrl) })
   const proxyUrl = `${resolveSameOriginApiUrl('/api/image-proxy')}?${params.toString()}`
-  const res = await fetch(proxyUrl, {
+  const res = await diagnosticFetch(proxyUrl, {
     credentials: 'same-origin',
     referrerPolicy: 'no-referrer'
   })

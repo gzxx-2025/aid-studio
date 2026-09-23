@@ -9,6 +9,8 @@ import { formatCreationImageProgressText,runEditImageTask } from '~/composables/
 import { userAssetRpsFormImageSceneSplit } from '~/utils/businessApi'
 import { resolveDialogueToolbarSourceImages } from '~/utils/formImageEditPrefill'
 import { storyboardPromptHtmlToPlain } from '~/utils/storyboardPromptAssetRef'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import { shouldApplyModalTaskProgressToCanvas } from '~/utils/liveGenScopeIsolation'
 import { createSceneModalCanvasGenerateActions } from './sceneModalCanvasGenerateActions'
 import {
@@ -34,6 +36,15 @@ export function useSceneModalGenerate(ctx: EditSceneImageModalCtx): SceneModalGe
     const instructionText = storyboardPromptHtmlToPlain(ctx.dialogueInstructionHtml.get() || '').trim()
     if (!instructionText) {
       message.warning('请输入修改要求')
+      return
+    }
+    const promptMaxLength = resolveModelPromptCharacterLimit(
+      ctx.selectedDialogueRawModel(),
+      instructionText,
+      EDIT_ASSET_PROMPT_MAX_CHARS
+    )
+    if (instructionText.length > promptMaxLength) {
+      message.warning(`提示词不能超过 ${promptMaxLength.toLocaleString('zh-CN')} 个字符`)
       return
     }
 

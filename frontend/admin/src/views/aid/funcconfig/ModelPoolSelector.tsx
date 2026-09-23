@@ -29,8 +29,14 @@ interface Props {
   /** 已选模型（有序） */
   selected: PoolModel[];
   onChange: (next: PoolModel[]) => void;
+  /** 服务端选择规则下的唯一默认模型。 */
+  defaultModelId?: number;
   /** 服务商 id → 名称映射（可空，缺失时不展示服务商标签） */
   providerNameMap?: Record<number, string>;
+  /** 当前业务声明的模型大类；候选池不会展示其他媒体类型。 */
+  requiredModelType?: string;
+  /** 当前业务声明的生成模式；候选池不会展示不支持该模式的模型。 */
+  requiredGenerateMode?: string;
 }
 
 /** 筛选条件 */
@@ -45,6 +51,22 @@ interface PoolFilter {
 const EMPTY_FILTER: PoolFilter = {
   modelType: null, generateMode: null, inputRequirement: null, providerId: null, keyword: ''
 };
+
+export function modelMatchesBusinessContext(
+  model: PoolModel,
+  requiredModelType?: string,
+  requiredGenerateMode?: string
+) {
+  if (requiredModelType && model.modelType !== requiredModelType) return false;
+  if (!requiredGenerateMode) return true;
+  const capabilities = Array.isArray(model.capabilities) ? model.capabilities : [];
+  if (capabilities.length > 0) {
+    return capabilities.some((capability: { code?: string; generateMode?: string; enabled?: boolean }) =>
+      capability.enabled !== false
+      && (capability.generateMode === requiredGenerateMode || capability.code === requiredGenerateMode));
+  }
+  return model.generateMode === requiredGenerateMode;
+}
 
 /** 模型标签行：状态 / 大类 / 输入要求 / 生成模式 / 服务商 */
 function ModelTags({ m, providerName }: { m: PoolModel; providerName?: string }) {
@@ -80,7 +102,10 @@ function ModelTags({ m, providerName }: { m: PoolModel; providerName?: string })
  * 模型池选择器：左侧候选（支持关键词/大类/生成模式/输入要求/服务商组合筛选，整行点击添加、
  * 一键添加筛选结果），右侧已选（保存顺序 = 展示顺序，支持置顶/上移/下移/移除/清空）。
  */
-export default function ModelPoolSelector({ pool, selected, onChange, providerNameMap = {} }: Props) {
+export default function ModelPoolSelector({
+  pool, selected, onChange, defaultModelId, providerNameMap = {},
+  requiredModelType, requiredGenerateMode
+}: Props) {
   const [filter, setFilter] = useState<PoolFilter>({ ...EMPTY_FILTER });
 
   const selectedIds = useMemo(() => new Set(selected.map((m) => m.id)), [selected]);
@@ -97,6 +122,8 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
     const kw = filter.keyword.trim().toLowerCase();
     return pool
       .filter((m) => !selectedIds.has(m.id))
+      .filter((m) => m.status !== '1')
+      .filter((m) => modelMatchesBusinessContext(m, requiredModelType, requiredGenerateMode))
       .filter((m) => !filter.modelType || m.modelType === filter.modelType)
       .filter((m) => !filter.generateMode || (m.capabilities?.length ? m.capabilities.some((capability: { generateMode: string }) => capability.generateMode === filter.generateMode) : m.generateMode === filter.generateMode))
       .filter((m) => !filter.inputRequirement || m.inputRequirement === filter.inputRequirement)
@@ -108,7 +135,7 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
           || (m.modelName || '').toLowerCase().includes(kw)
           || providerName.toLowerCase().includes(kw);
       });
-  }, [pool, selectedIds, filter, providerNameMap]);
+  }, [pool, selectedIds, filter, providerNameMap, requiredModelType, requiredGenerateMode]);
 
   const hasFilter = filter.keyword.trim() !== '' || filter.modelType != null
     || filter.generateMode != null || filter.inputRequirement != null || filter.providerId != null;
@@ -145,6 +172,12 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontWeight: 600, color: '#475569', fontSize: 13 }}>候选模型</span>
           <Space size={8}>
+            {(requiredModelType || requiredGenerateMode) && (
+              <Tag color="blue" style={{ borderRadius: 6, margin: 0 }}>
+                业务约束：{getLabelByValue(MODEL_TYPE_OPTIONS, requiredModelType || '', requiredModelType || '全部大类')}
+                {requiredGenerateMode ? ` / ${getLabelByValue(GENERATE_MODE_OPTIONS, requiredGenerateMode, requiredGenerateMode)}` : ''}
+              </Tag>
+            )}
             <span style={{ color: '#94a3b8', fontSize: 12 }}>{filtered.length} 个可添加</span>
             {filtered.length > 0 && hasFilter && (
               <Button size="small" type="link" style={{ padding: 0, height: 'auto' }} onClick={addAllFiltered}>
@@ -236,7 +269,7 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontWeight: 600, color: '#475569', fontSize: 13 }}>
-            已选模型 <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: 12 }}>（顺序即保存顺序）</span>
+            已选模型 <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12 }}>（首个可用且已配默认能力的模型为默认）</span>
           </span>
           <Space size={8}>
             <Tag color="blue" style={{ borderRadius: 6, fontWeight: 500, margin: 0 }}>{selected.length} 项</Tag>
@@ -261,6 +294,7 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
                       color: '#fff', fontSize: 11, fontWeight: 600, marginRight: 8
                     }}>{idx + 1}</span>
                     <b>{m.modelName}</b>
+                    {m.id === defaultModelId && <Tag color="green" style={{ borderRadius: 6, marginLeft: 6, marginRight: 0 }}>默认模型</Tag>}
                     <span style={{ color: '#94a3b8', fontSize: 12, marginLeft: 6 }}>({m.modelCode})</span>
                   </div>
                   <div style={{ marginTop: 4, paddingLeft: 30 }}>
@@ -269,11 +303,11 @@ export default function ModelPoolSelector({ pool, selected, onChange, providerNa
                 </div>
                 <Space size={4}>
                   <Tooltip title="置顶">
-                    <Button size="small" icon={<VerticalAlignTopOutlined />} disabled={idx === 0} onClick={() => moveTo(idx, 0)} />
+                    <Button size="small" aria-label={`将 ${m.modelName} 置顶`} icon={<VerticalAlignTopOutlined />} disabled={idx === 0} onClick={() => moveTo(idx, 0)} />
                   </Tooltip>
-                  <Button size="small" icon={<ArrowUpOutlined />} disabled={idx === 0} onClick={() => moveTo(idx, idx - 1)} />
-                  <Button size="small" icon={<ArrowDownOutlined />} disabled={idx === selected.length - 1} onClick={() => moveTo(idx, idx + 1)} />
-                  <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeAt(idx)} />
+                  <Tooltip title="上移"><Button size="small" aria-label={`将 ${m.modelName} 上移`} icon={<ArrowUpOutlined />} disabled={idx === 0} onClick={() => moveTo(idx, idx - 1)} /></Tooltip>
+                  <Tooltip title="下移"><Button size="small" aria-label={`将 ${m.modelName} 下移`} icon={<ArrowDownOutlined />} disabled={idx === selected.length - 1} onClick={() => moveTo(idx, idx + 1)} /></Tooltip>
+                  <Tooltip title="移除"><Button size="small" danger aria-label={`移除 ${m.modelName}`} icon={<DeleteOutlined />} onClick={() => removeAt(idx)} /></Tooltip>
                 </Space>
               </div>
             );

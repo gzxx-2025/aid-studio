@@ -14,11 +14,14 @@ import com.aid.common.exception.ServiceException;
 import com.aid.media.dto.MediaImageGenerateRequest;
 import com.aid.media.constants.DashscopeConstants;
 import com.aid.media.provider.ImageProviderClient;
+import com.aid.media.provider.ImageEditAssetSupport;
 import com.aid.media.provider.ReferenceImageLimiter;
 import com.aid.media.provider.ReferencePromptSanitizer;
 import com.aid.media.provider.ProviderResponseHelper;
 import com.aid.media.provider.ProviderSubmitResult;
 import com.aid.media.provider.ProviderTaskResult;
+import com.aid.media.service.ModelImageUrlProxyProcessor;
+import com.aid.media.service.ModelResourceUrlSigner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +39,21 @@ import java.util.Map;
 @Slf4j
 @Component
 public class DashscopeImageProviderClient implements ImageProviderClient {
+
+    private final ModelImageUrlProxyProcessor imageUrlProxyProcessor;
+    private final ModelResourceUrlSigner resourceUrlSigner;
+
+    /** 保留协议纯单测的源兼容；Spring 运行时使用下面的依赖构造器。 */
+    DashscopeImageProviderClient() {
+        this(null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DashscopeImageProviderClient(ModelImageUrlProxyProcessor imageUrlProxyProcessor,
+                                         ModelResourceUrlSigner resourceUrlSigner) {
+        this.imageUrlProxyProcessor = imageUrlProxyProcessor;
+        this.resourceUrlSigner = resourceUrlSigner;
+    }
 
     // 使用 DashscopeConstants 统一管理所有魔法值，避免重复定义和维护困难。
     // 协议名称：与 MediaGenerationServiceImpl 中的 DEFAULT_IMAGE_PROTOCOL 保持一致。
@@ -64,8 +82,17 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
                 ReferenceImageLimiter.resolveMax(modelConfig, 0));
         String effectiveModel = resolveEffectiveModel(modelConfig, request);
         ImageDialect dialect = resolveDialect(effectiveModel);
+        if (dialect == WanxImageEditAsyncDialect.INSTANCE
+                && ImageEditAssetSupport.isInpainting(request)) {
+            if (imageUrlProxyProcessor == null || resourceUrlSigner == null) {
+                throw new ServiceException("模型资源处理器未配置");
+            }
+            String normalizedMask = ImageEditAssetSupport.toWanMaskUrl(request);
+            normalizedMask = imageUrlProxyProcessor.processImageUrl(modelConfig, normalizedMask);
+            request.setMaskImageUrl(resourceUrlSigner.signImageUrl(normalizedMask));
+        }
         String submitUrl = buildSubmitUrl(modelConfig);
-        Map<String, Object> body = dialect.buildSubmitBody(effectiveModel, request);
+        Map<String, Object> body = dialect.buildSubmitBody(effectiveModel, request, modelConfig);
         String raw = doPost(submitUrl, modelConfig.getApiKey(), JSONUtil.toJsonStr(com.aid.model.definition.ModelConfiguredRequestBody.apply(modelConfig, body, request)), dialect.extraHeaders());
         JsonNode root = ProviderResponseHelper.readTree(raw);
         String taskId = ProviderResponseHelper.readText(root, "output.task_id", "task_id", "data.task_id");
@@ -335,6 +362,11 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
 
         // 构建提交请求体：按模型协议差异生成 input/messages/parameters 结构。
         Map<String, Object> buildSubmitBody(String modelName, MediaImageGenerateRequest request);
+
+        default Map<String, Object> buildSubmitBody(String modelName, MediaImageGenerateRequest request,
+                                                    AiModelConfigVo modelConfig) {
+            return buildSubmitBody(modelName, request);
+        }
 
         // 返回额外请求头：异步模式通常返回 X-DashScope-Async，默认无额外头。
         Map<String, String> extraHeaders();
@@ -838,6 +870,17 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
 
         /** 默认编辑功能：指令编辑（无需指定区域，仅通过指令增加/修改图片内容） */
         private static final String DEFAULT_FUNCTION = "description_edit";
+        private static final Map<String, String> CAPABILITY_FUNCTIONS = Map.ofEntries(
+                Map.entry("image_edit", "description_edit"),
+                Map.entry("image_inpainting", "description_edit_with_mask"),
+                Map.entry("image_outpainting", "expand"),
+                Map.entry("image_upscale", "super_resolution"),
+                Map.entry("image_stylization", "stylization_all"),
+                Map.entry("image_local_stylization", "stylization_local"),
+                Map.entry("image_text_removal", "remove_watermark"),
+                Map.entry("image_colorization", "colorization"),
+                Map.entry("image_doodle", "doodle"),
+                Map.entry("image_cartoon_reference", "control_cartoon_feature"));
 
         @Override
         public boolean supports(String normalizedModelName) {
@@ -847,19 +890,19 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
 
         @Override
         public Map<String, Object> buildSubmitBody(String modelName, MediaImageGenerateRequest request) {
+            return buildSubmitBody(modelName, request, null);
+        }
+
+        @Override
+        public Map<String, Object> buildSubmitBody(String modelName, MediaImageGenerateRequest request,
+                                                    AiModelConfigVo modelConfig) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put(DashscopeConstants.JSON_MODEL, modelName);
 
             Map<String, Object> input = new LinkedHashMap<>();
             Map<String, Object> options = request.getOptions();
 
-            String function = DEFAULT_FUNCTION;
-            if (options != null) {
-                Object funcObj = options.get("function");
-                if (funcObj != null && StrUtil.isNotBlank(String.valueOf(funcObj))) {
-                    function = String.valueOf(funcObj);
-                }
-            }
+            String function = resolveWanFunction(modelConfig, request);
             input.put("function", function);
             input.put(DashscopeConstants.JSON_PROMPT, request.getPrompt());
 
@@ -877,23 +920,25 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
                 input.put("base_image_url", baseImageUrl);
             }
 
-            if (options != null) {
-                Object maskObj = options.get("mask_image_url");
-                if (maskObj != null && StrUtil.isNotBlank(String.valueOf(maskObj))) {
-                    input.put("mask_image_url", String.valueOf(maskObj));
+            if ("description_edit_with_mask".equals(function)) {
+                if (StrUtil.isBlank(request.getMaskImageUrl())) {
+                    throw new ServiceException("蒙版不能为空");
                 }
+                input.put("mask_image_url", request.getMaskImageUrl());
             }
 
             body.put(DashscopeConstants.JSON_INPUT, input);
 
             Map<String, Object> parameters = new LinkedHashMap<>();
-            parameters.put(DashscopeConstants.JSON_N, 1);
+            int outputCount = request.getExpectedImageCount() == null ? 1 : request.getExpectedImageCount();
+            parameters.put(DashscopeConstants.JSON_N, outputCount);
             if (options != null) {
                 Object optParamsObj = options.get(DashscopeConstants.OPTIONS_KEY_PARAMETERS);
                 if (optParamsObj instanceof Map<?, ?> optParamsRaw) {
                     Map<String, Object> optParams = toStringObjectMap(optParamsRaw);
                     // 仅保留 wanx2.1-imageedit 官方支持的参数
-                    for (String allowed : new String[]{"n", "seed", "watermark", "strength"}) {
+                    for (String allowed : new String[]{"seed", "watermark", "strength",
+                            "upscale_factor", "is_sketch"}) {
                         Object v = optParams.get(allowed);
                         if (v != null) {
                             parameters.put(allowed, v);
@@ -901,11 +946,58 @@ public class DashscopeImageProviderClient implements ImageProviderClient {
                     }
                 }
             }
+            if ("expand".equals(function)) {
+                addExpandParameters(parameters, request);
+            }
             body.put(DashscopeConstants.JSON_PARAMETERS, parameters);
 
             // 不调用 mergeOptions：wanx2.1-imageedit 请求体结构固定，
             // 避免 aspect_ratio / force_single / size 等平台字段污染上游请求体
             return body;
+        }
+
+        private String resolveWanFunction(AiModelConfigVo modelConfig, MediaImageGenerateRequest request) {
+            if (modelConfig != null && StrUtil.isNotBlank(modelConfig.getCapabilityJson())) {
+                try {
+                    Object configured = JSONUtil.parseObj(modelConfig.getCapabilityJson()).get("wanxFunction");
+                    if (configured != null && StrUtil.isNotBlank(String.valueOf(configured))) {
+                        String value = String.valueOf(configured).trim();
+                        if (CAPABILITY_FUNCTIONS.containsValue(value)) return value;
+                        log.warn("Wanx function 配置无效, modelCode={}, function={}",
+                                modelConfig.getModelCode(), value);
+                        throw new ServiceException("模型能力配置无效");
+                    }
+                } catch (ServiceException ex) {
+                    throw ex;
+                } catch (Exception ex) {
+                    log.warn("Wanx function 配置解析失败, modelCode={}", modelConfig.getModelCode());
+                    throw new ServiceException("模型能力配置无效");
+                }
+            }
+            String capabilityCode = request == null ? null : request.getCapabilityCode();
+            return CAPABILITY_FUNCTIONS.getOrDefault(capabilityCode, DEFAULT_FUNCTION);
+        }
+
+        private void addExpandParameters(Map<String, Object> parameters, MediaImageGenerateRequest request) {
+            ImageEditAssetSupport.Dimensions dimensions = ImageEditAssetSupport.dimensions(
+                    request.getReferenceImageUrl(), "原图");
+            ImageEditAssetSupport.validateExpand(request, dimensions);
+            int sourceWidth = dimensions.width();
+            int sourceHeight = dimensions.height();
+            parameters.put("left_scale", scale(request.getSourceX(), sourceWidth));
+            parameters.put("right_scale", scale(request.getTargetWidth() - request.getSourceX() - sourceWidth,
+                    sourceWidth));
+            parameters.put("top_scale", scale(request.getSourceY(), sourceHeight));
+            parameters.put("bottom_scale", scale(request.getTargetHeight() - request.getSourceY() - sourceHeight,
+                    sourceHeight));
+        }
+
+        private java.math.BigDecimal scale(int pixels, int sourcePixels) {
+            if (sourcePixels <= 0 || pixels < 0) throw new ServiceException("扩图区域无效");
+            if (pixels > sourcePixels) throw new ServiceException("单侧扩图范围不能超过原图尺寸");
+            return java.math.BigDecimal.ONE.add(java.math.BigDecimal.valueOf(pixels)
+                    .divide(java.math.BigDecimal.valueOf(sourcePixels), 4, java.math.RoundingMode.HALF_UP)
+                    .stripTrailingZeros());
         }
 
         @Override

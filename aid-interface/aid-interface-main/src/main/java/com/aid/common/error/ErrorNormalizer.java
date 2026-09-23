@@ -1,6 +1,8 @@
 package com.aid.common.error;
 
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.aid.aid.domain.AidProviderErrorRule;
 import com.aid.common.error.rule.AidErrorLogService;
 import com.aid.common.error.rule.ErrorRuleCache;
@@ -211,6 +213,10 @@ public class ErrorNormalizer {
      */
     static TaskErrorResult classifyFallback(String rawMessage) {
         String lower = StrUtil.nullToEmpty(rawMessage).toLowerCase(Locale.ROOT);
+        String structuredCode = structuredErrorCode(rawMessage);
+        if ("arrearage".equalsIgnoreCase(structuredCode)) {
+            return TaskErrorResult.of(TaskErrorCode.MERCHANT_QUOTA_EXHAUSTED, rawMessage);
+        }
         if (containsAny(lower, "提示词过长", "提示词太长", "提示词长度超", "prompt too long",
                 "prompt is too long", "prompt length exceeds", "prompt exceeds")) {
             return withUserMessage(TaskErrorCode.USER_INPUT_TOO_LONG, rawMessage, "提示词过长，请精简");
@@ -268,7 +274,7 @@ public class ErrorNormalizer {
             return TaskErrorResult.of(TaskErrorCode.UPSTREAM_CONTENT_FILTERED, rawMessage);
         }
         if (containsAny(lower, "accountoverdueerror", "overdue balance", "serviceoverdue",
-                "account is overdue")) {
+                "arrearage", "account is overdue", "account is in good standing")) {
             return TaskErrorResult.of(TaskErrorCode.MERCHANT_QUOTA_EXHAUSTED, rawMessage);
         }
         if (containsAny(lower, "free quota exhausted", "free quota has been exhausted",
@@ -412,6 +418,23 @@ public class ErrorNormalizer {
             }
         }
         return false;
+    }
+
+    private static String structuredErrorCode(String rawMessage) {
+        if (StrUtil.isBlank(rawMessage)) {
+            return null;
+        }
+        try {
+            JSONObject root = JSON.parseObject(rawMessage);
+            String code = root.getString("code");
+            if (StrUtil.isNotBlank(code)) {
+                return code;
+            }
+            JSONObject error = root.getJSONObject("error");
+            return error == null ? null : error.getString("code");
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     /** 为可明确区分输入来源的错误覆盖更具体的用户提示，原始错误仍仅用于服务端排查。 */

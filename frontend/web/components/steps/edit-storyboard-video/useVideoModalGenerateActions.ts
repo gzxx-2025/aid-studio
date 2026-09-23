@@ -278,7 +278,10 @@ export function useVideoModalGenerateActions(ctx: VideoModalCtx): void {
       message.warning('请输入视频提示词，或先生成提示词')
       return
     }
-    const validation = validateImageToVideoPromptPlain(promptPlain)
+    const validation = validateImageToVideoPromptPlain(
+      promptPlain,
+      ctx.activeVideoPromptMaxLength(promptPlain)
+    )
     if (validation.ok === false) {
       message.warning(validation.message)
       return
@@ -300,7 +303,10 @@ export function useVideoModalGenerateActions(ctx: VideoModalCtx): void {
       message.warning('请输入视频提示词，或先生成提示词')
       return
     }
-    const validation = validateGridVideoPromptPlain(promptPlain)
+    const validation = validateGridVideoPromptPlain(
+      promptPlain,
+      ctx.activeVideoPromptMaxLength(promptPlain)
+    )
     if (validation.ok === false) {
       message.warning(validation.message)
       return
@@ -322,7 +328,10 @@ export function useVideoModalGenerateActions(ctx: VideoModalCtx): void {
       message.warning('请输入描述内容，或先生成提示词')
       return
     }
-    const validation = validateMultiParamVideoPromptPlain(promptPlain)
+    const validation = validateMultiParamVideoPromptPlain(
+      promptPlain,
+      ctx.activeVideoPromptMaxLength(promptPlain)
+    )
     if (validation.ok === false) {
       message.warning(validation.message)
       return
@@ -345,7 +354,10 @@ export function useVideoModalGenerateActions(ctx: VideoModalCtx): void {
     if (ctx.showEdgeVideoGenerateLoadingGet()) return
     const promptPlain = ctx.edgeVideoPromptPlain().trim()
     if (promptPlain) {
-      const validation = validateEdgeVideoPromptPlain(promptPlain)
+      const validation = validateEdgeVideoPromptPlain(
+        promptPlain,
+        ctx.activeVideoPromptMaxLength(promptPlain)
+      )
       if (validation.ok === false) {
         message.warning(validation.message)
         return

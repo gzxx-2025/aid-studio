@@ -92,6 +92,15 @@ public class AiModelConfigVo implements Serializable {
     /** 是否免费 */
     private Boolean isFree;
 
+    /** 模型上游图片输入是否使用代理 URL 模板；仅供服务端出站准备链路使用。 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private Boolean imageUrlProxyEnabled;
+
+    /** 图片代理 URL 模板；仅供服务端出站准备链路使用。 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @lombok.ToString.Exclude
+    private String imageUrlProxyTemplate;
+
     /** 特定路由后缀 (可选) */
     private String apiVersion;
 

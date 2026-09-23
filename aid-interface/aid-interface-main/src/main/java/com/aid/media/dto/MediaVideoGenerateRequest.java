@@ -76,8 +76,8 @@ public class MediaVideoGenerateRequest {
     private String audioType;
 
     /**
-     * 音色ID（可选）：决定视频中的声音音色。
-     * 仅在 audio=true 且模型 capability.supportsVoiceId 为真、且取值非空时下发。
+     * 音色 ID（可选）：由具体上游定义。音画同出协议可将其作为生成声音的音色，
+     * 参考音色协议也可将其作为独立参考素材；是否需要 audio=true 由 Provider 契约决定。
      */
     private String voiceId;
 

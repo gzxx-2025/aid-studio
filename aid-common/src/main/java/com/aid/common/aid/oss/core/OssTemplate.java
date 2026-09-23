@@ -1130,6 +1130,64 @@ public class OssTemplate
         return isManagedResourceUrl(fileUrl, ossConfigManager.getOssProperties());
     }
 
+    /**
+     * 为模型级第三方图片代理准备无签名的站点资源地址。系统自有资源统一换成站长配置的
+     * 资源访问域名，并移除原地址的查询参数和 Fragment；外部第三方 URL 原样返回。
+     *
+     * <p>该方法只由已显式开启图片代理的模型在签名前调用。普通模型仍走现有 COS/OSS
+     * 临时签名链路，不受图片代理配置影响。</p>
+     */
+    public String toModelProxyUnsignedSourceUrl(String sourceUrl)
+    {
+        if (StrUtil.isBlank(sourceUrl))
+        {
+            return sourceUrl;
+        }
+        OssProperties properties = ossConfigManager.getOssProperties();
+        if (Objects.isNull(properties))
+        {
+            return sourceUrl;
+        }
+        if (!isManagedResourceUrl(sourceUrl, properties))
+        {
+            return sourceUrl;
+        }
+        String resourceDomain = stripDomainTrailingSlash(properties.getEffectiveResourceAccessDomain());
+        if (StrUtil.isBlank(resourceDomain))
+        {
+            throw new OssException("资源访问域名未配置");
+        }
+        if (sourceUrl.startsWith("/"))
+        {
+            return toResourceAccessUrl(sourceUrl, properties);
+        }
+        try
+        {
+            URI source = URI.create(sourceUrl);
+            URI access = URI.create(resourceDomain);
+            if (!source.isAbsolute() || source.getHost() == null || access.getHost() == null
+                    || !("http".equalsIgnoreCase(access.getScheme())
+                    || "https".equalsIgnoreCase(access.getScheme())))
+            {
+                throw new OssException("资源访问域名配置无效");
+            }
+            String path = StrUtil.blankToDefault(source.getRawPath(), "/");
+            if (access.getHost().equalsIgnoreCase(source.getHost()))
+            {
+                return access.getScheme() + "://" + access.getRawAuthority() + path;
+            }
+            return resourceDomain + path;
+        }
+        catch (Exception exception)
+        {
+            if (exception instanceof OssException ossException)
+            {
+                throw ossException;
+            }
+            throw new OssException("资源访问地址转换失败");
+        }
+    }
+
     private boolean isManagedResourceUrl(String fileUrl, OssProperties properties)
     {
         if (StrUtil.isBlank(fileUrl) || Objects.isNull(properties))

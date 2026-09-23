@@ -777,6 +777,12 @@ public class TaskDispatchServiceImpl implements TaskDispatchService {
      * 查询上游任务状态。
      */
     private ProviderTaskResult queryUpstream(AidMediaTask task) {
+        try (com.aid.diagnostics.DiagnosticCapture.TaskScope scope = com.aid.diagnostics.DiagnosticCapture.task(task)) {
+            return queryUpstreamCaptured(task);
+        }
+    }
+
+    private ProviderTaskResult queryUpstreamCaptured(AidMediaTask task) {
         try {
             //    MPS 不在 aid_ai_model，故必须在 selectByModelCode 之前短路，避免因模型缺失误判为「无法查询」。
             if (Objects.equals(task.getMediaType(), com.aid.compose.ComposeConstants.MEDIA_TYPE_COMPOSE)) {

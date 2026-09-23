@@ -48,7 +48,9 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
      */
     @Override
     public AidConfig selectAidConfigById(Long id) {
-        return this.getById(id);
+        AidConfig config = this.getById(id);
+        rejectDiagnosticConfig(config);
+        return config;
     }
 
     /**
@@ -60,6 +62,7 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
     @Override
     public List<AidConfig> selectAidConfigList(AidConfig aidConfig) {
         LambdaQueryWrapper<AidConfig> lambdaQueryWrapper = Wrappers.lambdaQuery();
+        lambdaQueryWrapper.ne(AidConfig::getCategory, "error_diagnostics");
         if (aidConfig != null) {
             if (StringUtils.isNotEmpty(aidConfig.getCategory())) {
                 lambdaQueryWrapper.eq(AidConfig::getCategory, aidConfig.getCategory());
@@ -92,6 +95,7 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
      */
     @Override
     public int insertAidConfig(AidConfig aidConfig) {
+        rejectDiagnosticConfig(aidConfig);
         validateConfigValue(aidConfig.getCategory(), aidConfig.getConfigName(), aidConfig.getConfigValue());
         aidConfig.setCreateBy(currentOperator());
         aidConfig.setCreateTime(DateUtils.getNowDate());
@@ -107,6 +111,8 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
     @Override
     public int updateAidConfig(AidConfig aidConfig) {
         AidConfig existing = aidConfig.getId() == null ? null : this.getById(aidConfig.getId());
+        rejectDiagnosticConfig(existing);
+        rejectDiagnosticConfig(aidConfig);
         String category = StringUtils.isBlank(aidConfig.getCategory()) && existing != null
                 ? existing.getCategory() : aidConfig.getCategory();
         String configName = StringUtils.isBlank(aidConfig.getConfigName()) && existing != null
@@ -128,6 +134,8 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
         if (ids == null || ids.length == 0) {
             return 0;
         }
+        this.list(Wrappers.<AidConfig>lambdaQuery().select(AidConfig::getId, AidConfig::getCategory)
+                .in(AidConfig::getId, Arrays.asList(ids))).forEach(this::rejectDiagnosticConfig);
         return this.removeByIds(Arrays.asList(ids)) ? 1 : 0;
     }
 
@@ -142,6 +150,7 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
         if (id == null) {
             return 0;
         }
+        rejectDiagnosticConfig(this.getById(id));
         return this.removeById(id) ? 1 : 0;
     }
 
@@ -307,5 +316,10 @@ public class AidConfigServiceImpl extends ServiceImpl<AidConfigMapper, AidConfig
         lqw.eq(AidConfig::getDelFlag, "0");
         lqw.orderByAsc(AidConfig::getId);
         return lqw;
+    }
+    private void rejectDiagnosticConfig(AidConfig config) {
+        if (config != null && "error_diagnostics".equals(config.getCategory())) {
+            throw new ServiceException("请在错误处理页面管理诊断配置");
+        }
     }
 }

@@ -408,6 +408,7 @@ export interface VideoModalModelsApi {
   activeVideoModelGet: () => string
   videoRawModelList: () => UserModelListItem[]
   activeVideoRawModel: () => UserModelListItem | null
+  activeVideoPromptMaxLength: (prompt: string) => number
   handleSelectImageToVideoModel: (model: ModelOption) => void
   handleSelectMultiParamVideoModel: (model: ModelOption) => void
   handleSelectEdgeVideoModel: (model: ModelOption) => void

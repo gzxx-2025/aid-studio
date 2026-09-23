@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 
 import com.aid.billing.vo.ModelBillingDetailVO;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import lombok.Data;
 
@@ -36,6 +37,12 @@ public class AiModelVO implements Serializable
 
     /** 当前能力的参数联动规则。 */
     private java.util.List<com.aid.aid.domain.model.ModelParameterRule> parameterRules;
+
+    /**
+     * 当前业务为该模型开放的全部能力。capabilityCode 仍表示默认能力，
+     * 调用方切换操作时必须从本列表选择并原样提交能力编码。
+     */
+    private java.util.List<ModelCapabilityOptionVO> availableCapabilities = new java.util.ArrayList<>();
 
     /** 前端展示名称 */
     private String modelName;
@@ -113,6 +120,14 @@ public class AiModelVO implements Serializable
 
     /** 默认时长（秒），仅视频模型有效 */
     private Integer defaultDurationSeconds;
+
+    /** 当前业务能力的通用提示词最大字符数；null 表示未配置。 */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private Integer maxPromptCharacters;
+
+    /** 含中日韩文字时的最大字符数；null 表示沿用通用上限。 */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private Integer maxPromptCharactersCjk;
 
     /**
      * 单次最多可上传参考图张数（仅 image/video 有意义）。

@@ -7,6 +7,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.aid.aid.domain.media.AidMediaTask;
 import com.aid.aid.mapper.AidMediaTaskMapper;
+import com.aid.aid.mapper.AidMediaResultMapper;
 import com.aid.billing.service.BillingFacadeService;
 import com.aid.compose.ComposeConstants;
 import com.aid.compose.service.ComposeCompletionService;
@@ -31,7 +32,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -44,6 +48,8 @@ import java.util.Objects;
 public class TaskCompletionServiceImpl implements TaskCompletionService {
 
     private final AidMediaTaskMapper aidMediaTaskMapper;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AidMediaResultMapper aidMediaResultMapper;
     private final BillingFacadeService billingFacadeService;
     private final MediaConcurrencyLimiter concurrencyLimiter;
     private final ApplicationEventPublisher eventPublisher;
@@ -172,6 +178,9 @@ public class TaskCompletionServiceImpl implements TaskCompletionService {
             log.info("completeTask CAS 失败, taskId={} 已被其他路径处理", taskId);
             return false;
         }
+        if (MediaTaskStatus.SUCCEEDED.name().equals(targetStatus)) {
+            persistResultManifest(task, normalizeResultUrls(taskResult), userStr);
+        }
         task.setTerminalTime(terminalTime);
         if (MediaTaskStatus.SUCCEEDED.name().equals(targetStatus) && mediaEtaRecorder != null) {
             mediaEtaRecorder.recordSuccess(task);
@@ -257,6 +266,30 @@ public class TaskCompletionServiceImpl implements TaskCompletionService {
             return true;
         }
         return billingWon;
+    }
+
+    /** 保存供应商返回的全部有序结果；主任务继续以第 0 项兼容旧读取链路。 */
+    private void persistResultManifest(AidMediaTask task, List<String> resultUrls, String operator) {
+        if (aidMediaResultMapper == null || resultUrls.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < resultUrls.size(); index++) {
+            aidMediaResultMapper.upsertTaskResult(
+                    task.getId(), index, task.getMediaType(), resultUrls.get(index), operator);
+        }
+    }
+
+    private static List<String> normalizeResultUrls(ProviderTaskResult taskResult) {
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        if (StrUtil.isNotBlank(taskResult.getResultUrl())) {
+            ordered.add(taskResult.getResultUrl().trim());
+        }
+        if (taskResult.getResultUrls() != null) {
+            for (String resultUrl : taskResult.getResultUrls()) {
+                if (StrUtil.isNotBlank(resultUrl)) ordered.add(resultUrl.trim());
+            }
+        }
+        return new ArrayList<>(ordered);
     }
 
     /**

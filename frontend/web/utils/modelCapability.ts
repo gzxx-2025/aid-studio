@@ -37,6 +37,8 @@ const DEFAULT_DURATION_OPTIONS = [5, 10]
 const DEFAULT_MAX_COUNT = 4
 const MAX_STORYBOARD_VIDEO_COUNT = 4
 
+const CJK_SCRIPT_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
 const DEFAULT_AUDIO_OPTIONS: SelectOption<string>[] = [
   { value: 'silent', label: '无声视频' },
   { value: 'with_audio', label: '带音频' }
@@ -69,6 +71,29 @@ export function resolveCapabilityRecord(
     return raw as Record<string, unknown>
   }
   return {}
+}
+
+function readPromptCharacterLimit(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const limit = Math.floor(value)
+  return limit >= 0 ? limit : null
+}
+
+/**
+ * 与服务端 ModelCapabilityValidator.validatePrompt 保持同一字段优先级：
+ * 内容含中日韩文字时优先 maxPromptCharactersCjk，否则读取 maxPromptCharacters。
+ */
+export function resolveModelPromptCharacterLimit(
+  item: UserModelListItem | null | undefined,
+  prompt: string,
+  fallback: number
+): number {
+  const capability = resolveCapabilityRecord(item)
+  if (CJK_SCRIPT_RE.test(String(prompt ?? ''))) {
+    const cjkLimit = readPromptCharacterLimit(capability.maxPromptCharactersCjk)
+    if (cjkLimit != null) return cjkLimit
+  }
+  return readPromptCharacterLimit(capability.maxPromptCharacters) ?? fallback
 }
 
 function readStringOptions(raw: unknown): string[] {

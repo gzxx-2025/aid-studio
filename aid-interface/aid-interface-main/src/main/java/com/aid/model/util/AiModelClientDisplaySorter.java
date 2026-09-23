@@ -64,6 +64,7 @@ public final class AiModelClientDisplaySorter
             copy.setFuncName(source.getFuncName());
             copy.setModelType(source.getModelType());
             copy.setGenerateMode(source.getGenerateMode());
+            copy.setDefaultModelCode(source.getDefaultModelCode());
             copy.setModels(sortedModels(source.getModels()));
             result.add(copy);
         }

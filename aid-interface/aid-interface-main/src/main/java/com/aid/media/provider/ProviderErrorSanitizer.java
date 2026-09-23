@@ -14,6 +14,7 @@ public final class ProviderErrorSanitizer {
     }
 
     public static String fromHttp(int statusCode, String responseBody) {
+        responseBody = com.aid.diagnostics.DiagnosticCapture.redactKnownSecrets(responseBody);
         String sanitized = ReasoningContentSanitizer.sanitizeJson(responseBody);
         String detail = extractMessage(sanitized);
         String prefix = "HTTP " + statusCode;
@@ -21,6 +22,7 @@ public final class ProviderErrorSanitizer {
     }
 
     public static String safeMessage(String value, String fallback) {
+        value = com.aid.diagnostics.DiagnosticCapture.redactKnownSecrets(value);
         if (StringUtils.isBlank(value)) {
             return truncate(fallback);
         }
@@ -78,7 +80,7 @@ public final class ProviderErrorSanitizer {
     }
 
     private static String truncate(String value) {
-        String safe = StringUtils.defaultIfBlank(value, "上游请求失败");
+        String safe = com.aid.diagnostics.DiagnosticCapture.redactKnownSecrets(StringUtils.defaultIfBlank(value, "上游请求失败"));
         return safe.length() <= MAX_ERROR_LENGTH ? safe : safe.substring(0, MAX_ERROR_LENGTH);
     }
 }

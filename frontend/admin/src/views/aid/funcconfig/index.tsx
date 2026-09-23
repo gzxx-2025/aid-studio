@@ -10,12 +10,16 @@ import { MODEL_TYPE_OPTIONS, GENERATE_MODE_OPTIONS, INPUT_REQUIREMENT_OPTIONS, g
 import Auth from '@/components/Auth';
 import SectionTitle from '@/components/SectionTitle';
 import { download } from '@/utils/request';
-import { useDict } from '@/hooks/useDict';
-import ModelPoolSelector, { type PoolModel } from './ModelPoolSelector';
+import ModelPoolSelector, { modelMatchesBusinessContext, type PoolModel } from './ModelPoolSelector';
 import FunctionCapabilityEditor from './FunctionCapabilityEditor';
 import { confirmModelPoolRemoval } from './confirmModelPoolRemoval';
 import { normalizeFunctionCapabilityBindings, usesStructuredCapabilities } from './functionCapabilityBindings';
 import type { BusinessModelBinding } from '../aimanage/ModelBusinessBindingEditor';
+
+const STATUS_OPTIONS = [
+  { label: '启用', value: '0' },
+  { label: '停用', value: '1' }
+];
 
 export default function FuncconfigPage() {
   const [loading, setLoading] = useState(false);
@@ -28,6 +32,8 @@ export default function FuncconfigPage() {
   const [dlgOpen, setDlgOpen] = useState(false);
   const [dlgTitle, setDlgTitle] = useState('');
   const [form] = Form.useForm();
+  const watchedModelType = Form.useWatch('modelType', form);
+  const watchedGenerateMode = Form.useWatch('generateMode', form);
   const [selectedModels, setSelectedModels] = useState<PoolModel[]>([]);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -35,8 +41,6 @@ export default function FuncconfigPage() {
   const [activeCapabilityModel, setActiveCapabilityModel] = useState<number>();
   const [editingId, setEditingId] = useState<any>(null);
   const [editingData, setEditingData] = useState<any>(null);
-  const dicts = useDict('one_or_zero');
-  const statusDict = dicts['one_or_zero'] || [];
 
   const loadPool = async () => {
     try {
@@ -132,6 +136,11 @@ export default function FuncconfigPage() {
     try {
     const values = await form.validateFields();
     if (selectedModels.length === 0) { message.error('请至少选择一个可用模型'); return; }
+    const incompatible = selectedModels.filter((model) => !modelMatchesBusinessContext(model, values.modelType, values.generateMode));
+    if (incompatible.length > 0) {
+      message.error(`模型与当前业务大类或生成模式不兼容：${incompatible.map((model) => model.modelName || model.modelCode).join('、')}`);
+      return;
+    }
     const modelIds = JSON.stringify(selectedModels.map((m) => m.id));
     for (const model of selectedModels.filter(usesStructuredCapabilities)) {
       if (modelBindings.filter((row) => row.modelId === model.id && row.defaultCapability).length !== 1) {
@@ -173,6 +182,12 @@ export default function FuncconfigPage() {
       const existingIds = new Set(modelPool.map((model) => model.id));
       const ids: number[] = (r._parsedIds || []).filter((id: number) => existingIds.has(id));
       if (!ids.length) return <span style={{ color: '#94a3b8' }}>--</span>;
+      const defaultId = ids.find((id) => {
+        const model = modelPool.find((candidate) => candidate.id === id);
+        if (!model || model.status === '1') return false;
+        if (!usesStructuredCapabilities(model)) return true;
+        return (r.modelBindings || []).filter((binding: BusinessModelBinding) => binding.modelId === id && binding.defaultCapability).length === 1;
+      });
       return <Space wrap size={[4, 6]}>{ids.map((id, idx) => {
         const m = modelPool.find((x) => x.id === id);
         const req = m?.inputRequirement;
@@ -182,6 +197,7 @@ export default function FuncconfigPage() {
         return (
           <Tag key={idx} color={color} style={{ borderRadius: 6, margin: 0 }}>
             {resolveModelName(id)}
+            {id === defaultId && <span style={{ marginLeft: 4, fontSize: 11 }}>[默认]</span>}
             {disabled && <span style={{ marginLeft: 4, opacity: 0.75, fontSize: 11 }}>[已停用]</span>}
             {req && req !== 'text_only' && (
               <span style={{ marginLeft: 4, opacity: 0.75, fontSize: 11 }}>
@@ -193,7 +209,7 @@ export default function FuncconfigPage() {
       })}</Space>;
     } },
     { title: '状态', dataIndex: 'status', width: 100, render: (v: string) => {
-      const hit = statusDict.find((d: any) => d.value === v);
+      const hit = STATUS_OPTIONS.find((d) => d.value === v);
       const label = hit?.label || v;
       const color = v === '0' ? 'success' : 'default';
       return <Tag color={color} style={{ borderRadius: 6 }}>{label}</Tag>;
@@ -215,7 +231,7 @@ export default function FuncconfigPage() {
           <Form.Item name="funcCode" label="功能编码"><Input allowClear style={{ width: 180 }} placeholder="请输入" /></Form.Item>
           <Form.Item name="modelType" label="模型大类"><Select allowClear style={{ width: 140 }} options={MODEL_TYPE_OPTIONS.map((o) => ({ label: o.label, value: o.value }))} placeholder="请选择" /></Form.Item>
           <Form.Item name="generateMode" label="生成模式"><Select allowClear style={{ width: 160 }} options={GENERATE_MODE_OPTIONS.map((o) => ({ label: o.label, value: o.value }))} placeholder="请选择" /></Form.Item>
-          <Form.Item name="status" label="状态"><Select allowClear style={{ width: 120 }} options={statusDict.map((d: any) => ({ label: d.label, value: d.value }))} placeholder="请选择" /></Form.Item>
+          <Form.Item name="status" label="状态"><Select allowClear style={{ width: 120 }} options={STATUS_OPTIONS} placeholder="请选择" /></Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" icon={<SearchOutlined />} htmlType="submit">搜索</Button>
@@ -254,16 +270,20 @@ export default function FuncconfigPage() {
           <ModelPoolSelector
             pool={modelPool}
             selected={selectedModels}
+            defaultModelId={selectedModels.find((model) => model.status !== '1' && (!usesStructuredCapabilities(model)
+              || modelBindings.filter((binding) => binding.modelId === model.id && binding.defaultCapability).length === 1))?.id}
             onChange={(models) => {
               setSelectedModels(models);
               setModelBindings((current) => normalizeFunctionCapabilityBindings(models, current));
             }}
             providerNameMap={providerNameMap}
+            requiredModelType={watchedModelType}
+            requiredGenerateMode={watchedGenerateMode}
           />
           <FunctionCapabilityEditor models={selectedModels} value={modelBindings} onChange={setModelBindings} activeModel={activeCapabilityModel} onActiveModelChange={setActiveCapabilityModel} />
 
           <Row gutter={16} style={{ marginTop: 16 }}>
-            <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}><Select options={statusDict.map((d: any) => ({ label: d.label, value: d.value }))} placeholder="请选择状态" /></Form.Item></Col>
+            <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}><Select options={STATUS_OPTIONS} placeholder="请选择状态" /></Form.Item></Col>
             <Col span={24}><Form.Item name="remark" label="备注"><Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="请输入备注说明" /></Form.Item></Col>
           </Row>
         </Form>

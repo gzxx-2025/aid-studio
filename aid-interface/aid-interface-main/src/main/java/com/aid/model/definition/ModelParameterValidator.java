@@ -193,7 +193,7 @@ public final class ModelParameterValidator {
             if (field.getMinimum() != null && field.getMaximum() != null
                     && field.getMinimum().compareTo(field.getMaximum()) > 0) fail("参数范围无效");
             if (field.getStep() != null && field.getStep().signum() <= 0) fail("参数步长无效");
-            if (field.getMaterialRole() != null && !Set.of("first_frame", "last_frame", "reference_image", "reference_video", "reference_audio").contains(field.getMaterialRole())) fail("素材角色无效");
+            if (field.getMaterialRole() != null && !Set.of("first_frame", "last_frame", "reference_image", "reference_video", "reference_audio", "mask").contains(field.getMaterialRole())) fail("素材角色无效");
             if (field.getMaterialRole() != null && !Set.of("string", "object", "array").contains(field.getType())) fail("素材参数类型无效");
             if (field.getMaterialRole() != null && !Set.of("reference_video", "reference_audio").contains(field.getMaterialRole())
                     && (field.getMinDurationSeconds() != null || field.getMaxDurationSeconds() != null || field.getMaxTotalDurationSeconds() != null)) fail("图片不支持时长限制");
@@ -268,15 +268,15 @@ public final class ModelParameterValidator {
             switch (action.getOperator()) {
                 case "required" -> { if (empty(value)) failField(action.getField(), "缺少必填参数"); }
                 case "forbidden" -> { if (!empty(value)) failField(action.getField(), "参数组合不支持"); }
-                case "minimum" -> { if (value != null && magnitude(value).compareTo(decimal(action.getValue())) < 0) failField(action.getField(), "参数低于下限"); }
-                case "maximum" -> { if (value != null && magnitude(value).compareTo(decimal(action.getValue())) > 0) failField(action.getField(), "参数超过上限"); }
+                case "minimum" -> { if (value != null && magnitude(value).compareTo(decimal(action.getValue())) < 0) failField(action.getField(), minimumMessage(action.getValue())); }
+                case "maximum" -> { if (value != null && magnitude(value).compareTo(decimal(action.getValue())) > 0) failField(action.getField(), maximumMessage(action.getValue())); }
                 case "maximum_sum" -> {
                     Object other = read(parameters, action.getValueField());
                     if (other == null) fail("缺少素材统计，请先完成元数据校验");
                     if (value != null && decimal(value).signum() >= 0 && decimal(value).add(decimal(other)).compareTo(decimal(action.getValue())) > 0)
-                        failField(action.getField(), "输入与输出合计超过上限");
+                        failField(action.getField(), "输入与输出合计超过允许上限，最大合计为 " + displayConstraint(action.getValue()));
                 }
-                case "choices" -> { if (value != null && !allowed(value, (List<?>) action.getValue())) failField(action.getField(), "参数选项无效"); }
+                case "choices" -> { if (value != null && !allowed(value, (List<?>) action.getValue())) failField(action.getField(), choicesMessage((List<?>) action.getValue())); }
                 default -> { }
             }
         }
@@ -347,13 +347,14 @@ public final class ModelParameterValidator {
             case "array" -> value instanceof List<?>;
             default -> false;
         };
-        if (!valid) failField(path, "参数类型无效");
+        if (!valid) failField(path, "参数类型错误，应为" + typeLabel(field.getType()));
         if (field.getChoices() != null && !field.getChoices().isEmpty()
-                && !allowed(value, field.getChoices())) failField(path, "参数选项无效");
-        if (field.getMinimum() != null && magnitude(value).compareTo(field.getMinimum()) < 0) failField(path, "参数低于下限");
-        if (field.getMaximum() != null && magnitude(value).compareTo(field.getMaximum()) > 0) failField(path, "参数超过上限");
+                && !allowed(value, field.getChoices())) failField(path, choicesMessage(field.getChoices()));
+        if (field.getMinimum() != null && magnitude(value).compareTo(field.getMinimum()) < 0) failField(path, minimumMessage(field.getMinimum()));
+        if (field.getMaximum() != null && magnitude(value).compareTo(field.getMaximum()) > 0) failField(path, maximumMessage(field.getMaximum()));
         if (field.getStep() != null && value instanceof Number
-                && decimal(value).subtract(field.getMinimum() == null ? BigDecimal.ZERO : field.getMinimum()).remainder(field.getStep()).signum() != 0) failField(path, "参数步长无效");
+                && decimal(value).subtract(field.getMinimum() == null ? BigDecimal.ZERO : field.getMinimum()).remainder(field.getStep()).signum() != 0)
+            failField(path, "参数步长无效，应按 " + displayConstraint(field.getStep()) + " 递增");
         if (value instanceof Map<?, ?> map && "object".equals(field.getType())) checkFields(field.getProperties(), map, path + ".");
         if (value instanceof List<?> list && field.getItems() != null) {
             for (int i = 0; i < list.size(); i++) {
@@ -402,6 +403,35 @@ public final class ModelParameterValidator {
     private static BigDecimal decimal(Object value) {
         try { return new BigDecimal(String.valueOf(value)); }
         catch (RuntimeException ex) { fail("数字参数无效"); return BigDecimal.ZERO; }
+    }
+    private static String minimumMessage(Object minimum) { return "参数低于允许下限，最小值为 " + displayConstraint(minimum); }
+    private static String maximumMessage(Object maximum) { return "参数超过允许上限，最大值为 " + displayConstraint(maximum); }
+    private static String displayConstraint(Object value) {
+        if (value instanceof BigDecimal number) return number.stripTrailingZeros().toPlainString();
+        if (value instanceof Number) return new BigDecimal(String.valueOf(value)).stripTrailingZeros().toPlainString();
+        return String.valueOf(value);
+    }
+    private static String choicesMessage(List<?> choices) {
+        List<String> values = safe(choices).stream().limit(20).map(ModelParameterValidator::displayChoice).filter(Objects::nonNull).toList();
+        if (values.size() != choices.size()) return "参数值无效，请从模型能力允许值中选择";
+        String joined = String.join("、", values);
+        return joined.length() <= 300 ? "参数值无效，允许值为：" + joined : "参数值无效，请从模型能力允许值中选择";
+    }
+    private static String displayChoice(Object value) {
+        if (value instanceof Number || value instanceof Boolean) return displayConstraint(value);
+        if (value instanceof String text && text.matches("[\\p{L}\\p{N}_.:+/\\-]{1,64}")) return text;
+        return null;
+    }
+    private static String typeLabel(String type) {
+        return switch (type) {
+            case "string" -> "文本";
+            case "number" -> "数字";
+            case "integer" -> "整数";
+            case "boolean" -> "布尔值";
+            case "object" -> "对象";
+            case "array" -> "列表";
+            default -> "已声明类型";
+        };
     }
     private static <T> List<T> safe(List<T> list) { return list == null ? List.of() : list; }
     private static void failField(String field, String message) { log.info("模型参数校验失败: field={}, reason={}", field, message); throw new ServiceException(field + "：" + message); }

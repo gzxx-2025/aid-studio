@@ -217,7 +217,10 @@ export function useVideoModalPrompt(ctx: VideoModalCtx): void {
     }
 
     const plain = imageToVideoPromptPlain().trim()
-    const validation = validateImageToVideoPromptPlain(plain)
+    const validation = validateImageToVideoPromptPlain(
+      plain,
+      ctx.activeVideoPromptMaxLength(plain)
+    )
     if (validation.ok === false) {
       message.warning(validation.message)
       return

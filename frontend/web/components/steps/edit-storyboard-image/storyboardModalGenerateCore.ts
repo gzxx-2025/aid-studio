@@ -1,6 +1,8 @@
 'use client'
 
 import { message } from 'antd'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import {
 captureCreationLiveGenScope,
 matchesCreationLiveGenScope
@@ -110,6 +112,15 @@ export function createStoryboardModalGenerateCore(ctx: EditStoryboardImageModalC
     const promptPlain = ctx.storyboardPromptPlainText().trim()
     if (!promptPlain) {
       message.warning('请输入描述内容或先生成提示词')
+      return
+    }
+    const promptMaxLength = resolveModelPromptCharacterLimit(
+      ctx.selectedRawModel(),
+      promptPlain,
+      EDIT_ASSET_PROMPT_MAX_CHARS
+    )
+    if (promptPlain.length > promptMaxLength) {
+      message.warning(`提示词不能超过 ${promptMaxLength.toLocaleString('zh-CN')} 个字符`)
       return
     }
     if (!ctx.currentStoryboardId()) {

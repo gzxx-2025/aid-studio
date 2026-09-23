@@ -21,6 +21,8 @@ STORYBOARD_VIDEO_PROMPT_GRID_AGENT_BIZ_CATEGORY,
 STORYBOARD_VIDEO_PROMPT_IMAGE_AGENT_BIZ_CATEGORY
 } from '~/utils/extractAgentBiz'
 import { advanceGenerationToken,replaceRefValue } from '~/utils/generationToken'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import {
 modelsFromListByFuncGroups,
 pickFirstNonEmptyModelPool
@@ -200,6 +202,12 @@ export function useVideoModalModels(ctx: VideoModalCtx): void {
     activeVideoModelGet,
     videoRawModelList,
     activeVideoRawModel,
+    activeVideoPromptMaxLength: (prompt) =>
+      resolveModelPromptCharacterLimit(
+        activeVideoRawModel(),
+        prompt,
+        EDIT_ASSET_PROMPT_MAX_CHARS
+      ),
     handleSelectImageToVideoModel,
     handleSelectMultiParamVideoModel,
     handleSelectEdgeVideoModel,

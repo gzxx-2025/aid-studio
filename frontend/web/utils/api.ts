@@ -18,6 +18,13 @@ takeAxiosRequestAesKey
 } from '~/utils/apiCrypto'
 import { redirectToLogin } from '~/utils/authLoginNavigation'
 import {
+  captureBrowserFailure,
+  configureErrorDiagnostics,
+  createDiagnosticRequest,
+  isDiagnosticUrl,
+  type DiagnosticRequest
+} from '~/utils/errorDiagnostics'
+import {
 clearPendingCaptchaToken,
 isCaptchaProtectedAuthPath,
 takePendingCaptchaToken
@@ -31,6 +38,7 @@ type SseRechargeErrorData
 export { redirectToLogin } from '~/utils/authLoginNavigation'
 
 type ApiCryptoRetryConfig = InternalAxiosRequestConfig & {
+  __diagnosticRequest?: DiagnosticRequest
   __apiCryptoPlainData?: unknown
   __apiCryptoOriginalTransformRequest?: InternalAxiosRequestConfig['transformRequest']
   __apiCryptoRetryPrepared?: boolean
@@ -250,7 +258,7 @@ api.interceptors.request.use(
     const token = (typeof window !== 'undefined') ? localStorage.getItem('token') : ''
     const loginRequired = isLoginRequiredApi(config.url)
     if (!token && loginRequired) {
-      redirectToLogin()
+      if (!isDiagnosticUrl(config.url)) redirectToLogin()
       return Promise.reject(new axios.CanceledError('AUTH_REDIRECT'))
     }
     if (token) {
@@ -270,6 +278,12 @@ api.interceptors.request.use(
 
     // 添加其他通用请求头
     config.headers['X-Requested-With'] = 'XMLHttpRequest'
+
+    if (typeof window !== 'undefined' && !isDiagnosticUrl(config.url)) {
+      const tracked = config as ApiCryptoRetryConfig
+      tracked.__diagnosticRequest ??= createDiagnosticRequest(config.url || '', config.method || 'GET', config.data ?? config.params)
+      config.headers['X-AID-Request-ID'] = tracked.__diagnosticRequest.requestId
+    }
 
     const isFormData = typeof FormData !== 'undefined' && config.data instanceof FormData
     const isApiCryptoCandidate =
@@ -314,8 +328,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   async (response: AxiosResponse) => {
     const aesKey = takeAxiosRequestAesKey(response.config as InternalAxiosRequestConfig)
-    const data = await maybeDecryptApiPayload<Record<string, unknown>>(response.data, aesKey)
+    let data: Record<string, unknown>
+    try {
+      data = await maybeDecryptApiPayload<Record<string, unknown>>(response.data, aesKey)
+    } catch (error) {
+      captureBrowserFailure((response.config as ApiCryptoRetryConfig).__diagnosticRequest,
+        { status: response.status, body: response.data, encrypted: Boolean(aesKey) }, error,
+        String(response.headers['x-aid-request-id'] || ''))
+      throw error
+    }
     response.data = data
+
+    if (isDiagnosticUrl(response.config.url)) return data as unknown as AxiosResponse
 
     const retryResult = await retryExpiredEncryptedRequest(
       response.config as InternalAxiosRequestConfig,
@@ -329,6 +353,9 @@ api.interceptors.response.use(
       // 后端部分接口成功为 200，部分为 0（如充值订单列表）
       const ok = data.code === 200 || data.code === 0
       if (!ok) {
+        captureBrowserFailure((response.config as ApiCryptoRetryConfig).__diagnosticRequest,
+          { status: response.status, body: data }, undefined,
+          String(response.headers['x-aid-request-id'] || data.requestId || ''))
         if (handleLoginRequiredResponse(data)) {
           return Promise.reject(data)
         }
@@ -348,6 +375,11 @@ api.interceptors.response.use(
     if (axios.isCancel(error)) {
       return Promise.reject(error)
     }
+    if (isDiagnosticUrl(error.config?.url)) return Promise.reject(error)
+    captureBrowserFailure((error.config as ApiCryptoRetryConfig | undefined)?.__diagnosticRequest,
+      error.response ? { status: error.response.status, body: error.response.data } : undefined,
+      { name: error.name, message: error.message, code: error.code },
+      String(error.response?.headers?.['x-aid-request-id'] || ''))
     // 统一处理错误
     if (error.response) {
       // 服务器返回错误
@@ -435,5 +467,7 @@ export const request = {
     return asPayloadPromise<T>(api.patch(url, data, config))
   }
 }
+
+configureErrorDiagnostics((url, body) => request.post(url, body, { timeout: 10000 }))
 
 export default api

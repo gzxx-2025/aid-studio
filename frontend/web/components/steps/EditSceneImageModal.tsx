@@ -54,6 +54,8 @@ import { shouldShowAssetImageRegenerateAction } from '~/utils/assetImageActionMo
 import { assetUrl } from '~/utils/assetUrl'
 import { isFormIdUnderActiveStep3FormImageTask } from '~/utils/step3FormImageTaskRegistry'
 import { storyboardPromptHtmlToPlain } from '~/utils/storyboardPromptAssetRef'
+import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
+import { resolveModelPromptCharacterLimit } from '~/utils/modelCapability'
 import type { BillingQuoteRequest } from '~/types/business-api'
 import {
   useEditSceneImageModalController
@@ -140,6 +142,11 @@ export function EditSceneImageModal(props: EditSceneImageModalProps) {
   )
   const selectedDialogueModel = c.selectedDialogueModel()
   const selectedDialogueModelCode = String(selectedDialogueModel?.id || '').trim()
+  const dialoguePromptMaxLength = resolveModelPromptCharacterLimit(
+    c.selectedDialogueRawModel(),
+    storyboardPromptHtmlToPlain(c.dialogueInstructionHtml.value || ''),
+    EDIT_ASSET_PROMPT_MAX_CHARS
+  )
   const currentImageFormId = Number(
     (currentImg as { rpsFormId?: unknown } | null)?.rpsFormId ?? NaN
   )
@@ -743,6 +750,7 @@ export function EditSceneImageModal(props: EditSceneImageModalProps) {
                           maxSourceCount={FORM_IMAGE_REFERENCE_LIMIT}
                           sourceImages={c.dialogueSourceImages.value}
                           instructionHtml={c.dialogueInstructionHtml.value}
+                          promptMaxLength={dialoguePromptMaxLength}
                           modelValue={c.selectedDialogueModel()}
                           modelOptions={c.dialogueModelOptions}
                           modelExpanded={c.dialogueModelDropdownExpanded.value}

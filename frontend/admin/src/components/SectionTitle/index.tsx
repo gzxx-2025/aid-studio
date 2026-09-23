@@ -16,12 +16,12 @@ interface Props {
  */
 export default function SectionTitle({ title, desc, extra, style }: Props) {
   return (
-    <div className="form-section-title" style={{ justifyContent: 'space-between', ...style }}>
+    <div className="form-section-title" style={style}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         {title}
         {desc && <span className="form-section-title__desc">{desc}</span>}
       </span>
-      {extra}
+      {extra && <span style={{ marginLeft: 'auto' }}>{extra}</span>}
     </div>
   );
 }

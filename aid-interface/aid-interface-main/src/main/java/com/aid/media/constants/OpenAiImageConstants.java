@@ -24,6 +24,8 @@ public final class OpenAiImageConstants {
     public static final String JSON_QUALITY = "quality";
     public static final String JSON_BACKGROUND = "background";
     public static final String JSON_OUTPUT_FORMAT = "output_format";
+    public static final String JSON_OUTPUT_COMPRESSION = "output_compression";
+    public static final String JSON_MODERATION = "moderation";
     /** edits 入参：参考图引用数组，元素 {@code {"image_url": "..."}} */
     public static final String JSON_IMAGES = "images";
     public static final String JSON_IMAGE_URL = "image_url";
@@ -47,10 +49,13 @@ public final class OpenAiImageConstants {
     public static final String IMAGE_CONTENT_TYPE_PNG = "image/png";
     public static final String IMAGE_SUFFIX_JPG = ".jpg";
     public static final String IMAGE_CONTENT_TYPE_JPEG = "image/jpeg";
+    public static final String IMAGE_SUFFIX_WEBP = ".webp";
+    public static final String IMAGE_CONTENT_TYPE_WEBP = "image/webp";
     /** 允许的 output_format 取值：png（默认）/ jpeg（落库后缀 .jpg）；其余格式一律按 png 处理 */
     public static final String OUTPUT_FORMAT_PNG = "png";
     public static final String OUTPUT_FORMAT_JPEG = "jpeg";
     public static final String OUTPUT_FORMAT_JPG = "jpg";
+    public static final String OUTPUT_FORMAT_WEBP = "webp";
     public static final int LOG_RESPONSE_SNIPPET_MAX = 500;
     public static final String ERROR_API_KEY_EMPTY = "密钥未配置";
     public static final String ERROR_BASE_URL_EMPTY = "网关未配置";

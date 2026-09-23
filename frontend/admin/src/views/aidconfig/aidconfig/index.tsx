@@ -155,7 +155,7 @@ const REQUIRED_ACCOUNT_SECURITY_FIELDS = [
 /** 专属页面维护或程序内部使用的配置不进入通用编辑入口，数据库值仍保留。 */
 const HIDDEN_CATEGORIES = new Set<string>([
   'realAuth', 'system_upgrade', 'official_gateway', 'seo',
-  'provider_balance', 'media_eta'
+  'provider_balance', 'media_eta', 'error_diagnostics'
 ]);
 
 /** SEO 统一由专用页面维护；历史默认值保留在数据库供兼容读取，不在这里编辑。 */

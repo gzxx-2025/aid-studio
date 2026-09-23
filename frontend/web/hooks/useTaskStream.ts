@@ -1,3 +1,4 @@
+import { captureStreamFailure, diagnosticFetch } from '~/utils/errorDiagnostics'
 import { buildUserApiAuthHeaders, redirectToLogin, resolveClientApiUrl } from '~/utils/api'
 import { claimTaskStreamConnectSlot } from '~/utils/taskStreamConnectGuard'
 import {
@@ -149,6 +150,7 @@ export function createTaskStream(
   let etaAnchor: TaskEtaProgress | null = null
 
   let abortController: AbortController | null = null
+  let streamResponse: Response | undefined
   let settled = false
 
   const setLastProgress = (p: TaskProgressEventData, fromEtaTicker = false) => {
@@ -250,6 +252,7 @@ export function createTaskStream(
 
       // partial_failed — 终态：部分成功部分失败（可续生）
       if (name === 'partial_failed') {
+        captureStreamFailure(streamResponse, { event: name, data: dataRaw })
         settleOnce(() => {
           scheduleUserBalanceRefresh()
           resolve({
@@ -263,6 +266,9 @@ export function createTaskStream(
       // error — 终态：任务失败（结构化错误）
       if (name === 'error') {
         const { errorMessage, errorData } = resolveErrorFromPayload(dataRaw)
+        if (!isBenignTaskSseDisconnectMessage(errorMessage)) {
+          captureStreamFailure(streamResponse, { event: name, data: dataRaw })
+        }
         settleOnce(() => {
           // 良性断连由上层重连；此处不刷积分，避免空窗误触发
           if (!isBenignTaskSseDisconnectMessage(errorMessage)) {
@@ -302,7 +308,7 @@ export function createTaskStream(
 
       let res: Response
       try {
-        res = await fetch(url, {
+        res = await diagnosticFetch(url, {
           method: 'GET',
           headers: {
             Accept: 'text/event-stream',
@@ -311,6 +317,7 @@ export function createTaskStream(
           signal: abortController.signal,
           cache: 'no-store'
         })
+        streamResponse = res
       } catch (e: unknown) {
         if (closed) {
           settleOnce(() => reject(new Error('Task SSE aborted')))
@@ -336,6 +343,7 @@ export function createTaskStream(
 
       const reader = res.body?.getReader()
       if (!reader) {
+        captureStreamFailure(res, null, new Error('SSE: no response body'))
         settleOnce(() => reject(new Error('SSE: no response body')))
         return
       }
@@ -378,6 +386,7 @@ export function createTaskStream(
         if (!settled && closed) {
           settleOnce(() => reject(new Error('Task SSE aborted')))
         } else if (!settled && !closed) {
+          captureStreamFailure(res, buffer, new Error('Task SSE ended unexpectedly'))
           settleOnce(() => reject(new Error('Task SSE ended unexpectedly')))
         }
       } catch (e: unknown) {
@@ -386,6 +395,7 @@ export function createTaskStream(
           return
         }
         if (e instanceof DOMException && e.name === 'AbortError') return
+        captureStreamFailure(res, buffer, e)
         settleOnce(() => reject(e instanceof Error ? e : new Error('Task SSE read failed')))
       }
     })()

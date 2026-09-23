@@ -20,6 +20,7 @@ import { buildAidAgentListScopeParams } from '~/utils/createFlowProjectContext'
 import { userModelListByFuncCodes } from '~/utils/businessApi'
 import type { UserModelListItem } from '~/types/business-api'
 import type { SelectOption } from '~/utils/modelCapability'
+import { findModelByReference } from '~/utils/modelReference'
 import type { EditSceneImageModalCtx } from './types'
 import { useMirrored, type Mirrored } from './useMirrored'
 
@@ -42,6 +43,7 @@ export interface SceneModalModelsApi {
   upscaleModelPool: Mirrored<UserModelListItem[]>
   initImageModelOptions: () => Promise<void>
   selectedDialogueModel: () => ModelOption
+  selectedDialogueRawModel: () => UserModelListItem | null
   multiViewSelectedModel: () => ModelOption
   dialogueAspectRatioSelectOptions: SelectOption<string>[]
   dialogueCountSelectOptions: SelectOption<number>[]
@@ -207,6 +209,9 @@ export function useSceneModalModels(ctx: EditSceneImageModalCtx): SceneModalMode
   const selectedDialogueModel = (): ModelOption =>
     resolveSelectedModelOption(getDialogueModelOptions(), dialogueSettings.get().model)
 
+  const selectedDialogueRawModel = (): UserModelListItem | null =>
+    findModelByReference(getDialogueRawModelList(), dialogueSettings.get().model)
+
   const {
     aspectRatioSelectOptions: dialogueAspectRatioSelectOptions,
     countSelectOptions: dialogueCountSelectOptionsRaw,
@@ -265,6 +270,7 @@ export function useSceneModalModels(ctx: EditSceneImageModalCtx): SceneModalMode
     upscaleModelPool,
     initImageModelOptions,
     selectedDialogueModel,
+    selectedDialogueRawModel,
     multiViewSelectedModel,
     dialogueAspectRatioSelectOptions,
     dialogueCountSelectOptions,

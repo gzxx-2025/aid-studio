@@ -679,10 +679,10 @@ export default function CapabilityEditor({ modelType, form, cap, onCapChange, on
 
       {modelType === 'video' && (
         <div style={{ marginBottom: 14 }}>
-          <GroupLabel text="参考音频输入" keyName="supportsReferenceAudio" />
+          <GroupLabel text="参考音频文件输入" keyName="supportsReferenceAudio" />
           <Space size={12} align="center" wrap>
             <span style={{ fontSize: 12, color: '#64748b' }}>
-              支持传入参考音频
+              支持传入参考音频文件
               <Switch
                 size="small"
                 style={{ marginLeft: 6 }}
@@ -913,7 +913,7 @@ export default function CapabilityEditor({ modelType, form, cap, onCapChange, on
           <Space wrap align="end" style={{ marginTop: 10 }}>
             <div><GroupLabel text="支持背景音乐" keyName="supportsBgm" /><Switch disabled={cap.supportsAudio !== true} checked={cap.supportsBgm === true}
               onChange={(checked) => updateCap({ supportsBgm: checked })} /></div>
-            <div><GroupLabel text="支持指定音色" keyName="supportsVoiceId" /><Switch disabled={cap.supportsAudio !== true} checked={cap.supportsVoiceId === true}
+            <div><GroupLabel text="支持参考音色 ID" keyName="supportsVoiceId" /><Switch checked={cap.supportsVoiceId === true}
               onChange={(checked) => updateCap({ supportsVoiceId: checked })} /></div>
             <div><GroupLabel text="支持音色控制" keyName="supportsVoiceControl" /><Switch disabled={cap.supportsAudio !== true} checked={cap.supportsVoiceControl === true}
               onChange={(checked) => updateCap({ supportsVoiceControl: checked })} /></div>
@@ -1000,7 +1000,7 @@ export default function CapabilityEditor({ modelType, form, cap, onCapChange, on
                 onChange={(v) => updateCap(v ? { supportsAudio: true }
                   : {
                       supportsAudio: false, defaultAudio: false, supportsBgm: false,
-                      supportsVoiceId: false, supportsVoiceControl: false, audioTypes: []
+                      supportsVoiceControl: false, audioTypes: []
                     })}
               />
             </span>

@@ -1,4 +1,8 @@
 aid-master/
+├── aid-interface/aid-interface-main/src/main/java/com/aid/diagnostics/  完整错误采集、提示词与秘密过滤、签名配置、白名单申请、混合加密和持久化异步发送
+├── aid-interface/aid-interface-system/src/main/java/com/aid/aid/{domain,mapper}/AidDiagnostic*  诊断记录、发送队列及异步任务关联
+├── aid-business/aid-business-main/src/main/java/com/aid/diagnostics/  请求关联切面与登录用户浏览器补充接口
+├── aid-business/aid-business-system/src/main/java/com/aid/diagnostics/  后台错误处理专用配置和发送接口
 ├── deploy/nginx/                         受管站点模板、安全渲染、容器启动与部署说明
 ├── aid-interface/aid-interface-main/src/main/java/com/aid/seo/service/PublicPageService.java  公开HTML文档与真实404
 ├── aid-interface/aid-interface-main/src/main/java/com/aid/upgrade/service/NginxManagementService.java  受管网关任务提交
