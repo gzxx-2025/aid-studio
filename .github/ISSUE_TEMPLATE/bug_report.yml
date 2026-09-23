@@ -42,11 +42,9 @@ body:
   - type: input
     id: report_code
     attributes:
-      label: 报告编码 / Report code
-      description: 已提交请填写准确编码；未提交请填写“未提交”。编码错误的 Issue 将直接关闭，不予处理。 / Enter the exact code if submitted; otherwise enter "Not submitted". Issues with an incorrect code will be closed without investigation.
-      placeholder: 报告编码；未提交请填“未提交” / Report code or "Not submitted"
-    validations:
-      required: true
+      label: 报告编码（已提交时填写） / Report code (if submitted)
+      description: 选“已提交”请填写后台生成的准确编码；选“未提交”可直接留空。已提交但编码缺失或错误的 Issue 将直接关闭，不予处理。 / If you selected Yes, enter the exact code. Leave blank if No. Issues marked Yes with a missing or incorrect code will be closed without investigation.
+      placeholder: 后台生成的报告编码 / Code shown in the platform admin
   - type: input
     id: environment
     attributes:
