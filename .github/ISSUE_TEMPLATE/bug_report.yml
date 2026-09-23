@@ -1,66 +1,74 @@
-name: Bug report / 缺陷反馈
-description: Report a reproducible problem / 提交可复现的问题
+name: 🐛 缺陷反馈 / Bug report
+description: 描述遇到的问题，帮助我们定位 / Report a reproducible issue
 title: "[Bug] "
 body:
   - type: markdown
     attributes:
       value: |
-        中文或 English 均可。Please search existing issues first.
-        Do not include credentials, private URLs or user data. 安全漏洞请通过仓库 Security 页私密报告。
+        感谢反馈！请先搜索现有 Issue，中文或 English 均可。
+        公开内容请勿包含密钥、私人链接或个人信息；安全漏洞请通过仓库 Security 页私密报告。
+
+        Thanks for reporting. Please search existing issues first. Do not post credentials, private links or personal data. Report security vulnerabilities privately through the Security tab.
   - type: input
     id: version
     attributes:
-      label: AID version or commit / 版本或提交
-      description: Include updater version for upgrade issues / 升级问题请同时注明升级器版本。
+      label: 版本或提交 / Version or commit
+      description: 升级问题请同时注明升级器版本。 / For upgrade issues, include the updater version.
+      placeholder: 例如版本号或提交 SHA / e.g. a version or commit SHA
     validations:
       required: true
   - type: dropdown
     id: component
     attributes:
-      label: Affected area / 问题位置
+      label: 问题位置 / Affected area
       options:
-        - Creator workflow / 创作流程
-        - Models and generation / 模型与生成
-        - Admin interface / 管理后台
-        - Installation or upgrade / 安装升级
-        - Documentation / 文档
-        - Other / 其他
+        - 创作流程 / Creator workflow
+        - 模型与生成 / Models and generation
+        - 管理后台 / Admin interface
+        - 安装升级 / Installation or upgrade
+        - 文档 / Documentation
+        - 其他 / Other
     validations:
       required: true
-  - type: textarea
+  - type: dropdown
+    id: report_submitted
+    attributes:
+      label: 是否已在平台后台提交报告？ / Submitted a report in the platform admin?
+      options:
+        - 已提交 / Yes
+        - 未提交 / No
+    validations:
+      required: true
+  - type: input
+    id: report_code
+    attributes:
+      label: 报告编码 / Report code
+      description: 已提交请填写准确编码；未提交请填写“未提交”。编码错误的 Issue 将直接关闭，不予处理。 / Enter the exact code if submitted; otherwise enter "Not submitted". Issues with an incorrect code will be closed without investigation.
+      placeholder: 报告编码；未提交请填“未提交” / Report code or "Not submitted"
+    validations:
+      required: true
+  - type: input
     id: environment
     attributes:
-      label: Environment / 环境
-      description: OS, CPU architecture, RAM, Docker or systemd, browser; redact private addresses / 系统、架构、内存、部署方式、浏览器，不含私有地址。
-    validations:
-      required: true
+      label: 运行环境（选填） / Environment (optional)
+      description: 系统、部署方式或浏览器，知道多少填多少。 / OS, deployment mode or browser, if relevant.
+      placeholder: 例如 Windows 11、Docker、Chrome / e.g. Windows 11, Docker, Chrome
   - type: textarea
-    id: reproduction
+    id: details
     attributes:
-      label: Steps to reproduce / 复现步骤
+      label: 详细描述 / Details
+      description: 说明问题出现时做了什么、在哪一步出错；如有简短报错文字，也可脱敏后放在这里。 / Describe what you did and where it failed. You may include a short redacted error message.
       placeholder: |
-        1. Open / 打开...
-        2. Configure / 配置...
-        3. Run / 操作...
+        1. 我做了什么？ / What did you do?
+        2. 问题在哪一步出现？ / Where did it fail?
+        3. 出现了什么情况？ / What happened?
     validations:
       required: true
-  - type: textarea
-    id: result
+  - type: upload
+    id: screenshot
     attributes:
-      label: Expected and actual behavior / 预期与实际结果
+      label: 错误截图（选填） / Error screenshot (optional)
+      description: 直接上传截图即可，请先遮盖敏感信息。 / Upload a screenshot after hiding sensitive information.
     validations:
-      required: true
-  - type: textarea
-    id: evidence
-    attributes:
-      label: Redacted logs or screenshots / 脱敏日志或截图
-      description: Minimal excerpts only; no full config files, database exports or signed media URLs / 只提供最小片段，不上传完整配置、数据库或签名媒体链接。
-  - type: checkboxes
-    id: checks
-    attributes:
-      label: Before submitting / 提交前确认
-      options:
-        - label: I searched existing issues. / 已搜索现有问题。
-          required: true
-        - label: I removed secrets and personal data; this is not a public vulnerability disclosure. / 已脱敏，且此处不公开披露漏洞。
-          required: true
+      required: false
+      accept: ".png,.jpg,.jpeg,.gif,.webp"
