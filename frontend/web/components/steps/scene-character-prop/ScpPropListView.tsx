@@ -7,7 +7,7 @@ import { AssetCardCancelIcon } from '~/components/common/AssetCardCancelIcon'
 import { BillingQuoteConfirm } from '~/components/common/BillingQuoteConfirm'
 import { shouldShowAssetImageRegenerateAction } from '~/utils/assetImageActionMode'
 import { STEP3_EDIT_IMAGE_GENERATING_TOOLTIP } from '~/utils/step3EditImageGate'
-import { getPropFormName, getPropFormPrefix, getPropName, getPropPrefix } from './scpRowUtils'
+import { getPropFormName, getPropName, getPropPrefix } from './scpRowUtils'
 import { iconAutGenerate, iconDownload, iconEmptyFail, iconManual, iconPreview, iconReplace } from './scpIcons'
 import { resolveScpFormImageBillingRequest } from './scpBillingQuote'
 import { ScpPendingFormStrip } from './ScpPendingFormStrip'
@@ -76,9 +76,6 @@ export function ScpPropListView({ ctx }: { ctx: ScpCtx }) {
                       <div key={`prop-form-${prop.index}-${formIndex}`} className="prop-form-item">
                         <div className="prop-form-header">
                           <div className="prop-form-title-wrapper">
-                            <span className="prop-form-title-prefix">
-                              {getPropFormPrefix(form.name)}
-                            </span>
                             {ctx.editingPropFormIndex.value === `${prop.index}-${formIndex}` ? (
                               <Input
                                 value={ctx.editingPropFormName.value}

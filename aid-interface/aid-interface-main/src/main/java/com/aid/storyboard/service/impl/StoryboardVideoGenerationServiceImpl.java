@@ -109,6 +109,7 @@ import com.aid.storyboard.video.ResolvedReference;
 import com.aid.storyboard.video.VideoReferenceContext;
 import com.aid.storyboard.video.VideoReferencePlan;
 import com.aid.storyboard.video.VideoReferencePlanner;
+import com.aid.tokendance.provider.common.TokenDanceProtocols;
 
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.StrUtil;
@@ -631,14 +632,17 @@ public class StoryboardVideoGenerationServiceImpl implements IStoryboardVideoGen
     {
         String requested = multiCapability(request);
         AiModelConfigVo selected = requireVideoModel(request.getModelName(), funcCode, requested);
-        if (requested != null || !"dmc-h3-video".equals(selected.getProtocol())
-                || !hasMultiReferenceSelection(request))
+        boolean dmcH3 = "dmc-h3-video".equals(selected.getProtocol());
+        boolean tokenDanceH3 = TokenDanceProtocols.isTokenDance(selected.getProviderCode())
+                && TokenDanceProtocols.matches(TokenDanceProtocols.MINIMAX_VIDEO_GENERATION_V2,
+                        selected.getProtocol());
+        boolean implicitReference = dmcH3 && hasMultiReferenceSelection(request)
+                || tokenDanceH3 && hasTokenDanceReferenceSelection(request);
+        if (requested != null || !implicitReference)
         {
             return selected;
         }
-        // The existing multi-parameter Web request sends a model code but not a
-        // capability code. Select the bound reference route before quote and
-        // submission so validation, SKU and the upstream payload agree.
+        // 旧版多参请求只传模型编码；先选定参考能力，使报价、预校验与正式提交一致。
         return requireVideoModel(request.getModelName(), funcCode, "reference_to_video");
     }
 
@@ -647,6 +651,22 @@ public class StoryboardVideoGenerationServiceImpl implements IStoryboardVideoGen
         if (request == null) return false;
         if (request.getBaseImageRecordId() != null
                 || request.getReferenceOverrides() != null && !request.getReferenceOverrides().isEmpty()
+                || request.getReferenceAudioRecordIds() != null && !request.getReferenceAudioRecordIds().isEmpty()
+                || request.getReferenceAudioIds() != null && !request.getReferenceAudioIds().isEmpty()
+                || request.getReferenceVideoRecordIds() != null && !request.getReferenceVideoRecordIds().isEmpty())
+        {
+            return true;
+        }
+        String prompt = request.getVideoPrompt();
+        return StrUtil.isNotBlank(prompt) && (prompt.contains("@图片") || prompt.contains("<Picture ")
+                || prompt.contains("<Video ") || prompt.contains("<Audio "));
+    }
+
+    /** 单张垫图仍走首帧能力；TokenDance 只为显式参考素材请求补齐旧版缺失的能力编码。 */
+    private static boolean hasTokenDanceReferenceSelection(StoryboardVideoGenerateRequest request)
+    {
+        if (request == null) return false;
+        if (request.getReferenceOverrides() != null && !request.getReferenceOverrides().isEmpty()
                 || request.getReferenceAudioRecordIds() != null && !request.getReferenceAudioRecordIds().isEmpty()
                 || request.getReferenceAudioIds() != null && !request.getReferenceAudioIds().isEmpty()
                 || request.getReferenceVideoRecordIds() != null && !request.getReferenceVideoRecordIds().isEmpty())

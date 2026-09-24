@@ -57,6 +57,7 @@ const CONFIG_TEST_FIELD_REMAP: Record<string, Record<string, string>> = {
 
 import ValueField from './ValueField';
 import ImageModerationSection from './ImageModerationSection';
+import ImageDetectionSection from './ImageDetectionSection';
 import MediaProcessSection from './MediaProcessSection';
 import TencentAsrSection from './TencentAsrSection';
 import AdminEntrySection from './AdminEntrySection';
@@ -432,6 +433,7 @@ export default function AidconfigPage() {
    * 同时隐藏对该分类无意义的「保存/同步/通用测试」头部按钮（区块内置自己的保存/测试按钮）。
    */
   const isImageModeration = activeCategory === IMAGE_MODERATION_CATEGORY;
+  const isImageDetection = activeCategory === 'image_object_detection';
   const isMediaProcess = activeCategory === MEDIA_PROCESS_CATEGORY;
   const isTencentAsr = activeCategory === TENCENT_ASR_CATEGORY;
   const isAdminEntry = activeCategory === ADMIN_ENTRY_CATEGORY;
@@ -442,6 +444,7 @@ export default function AidconfigPage() {
   /** 走专用区块（自带保存/操作）的分类：隐藏通用的保存/同步/测试/刷新头部按钮 */
   const isSpecialSection =
     isImageModeration ||
+    isImageDetection ||
     isMediaProcess ||
     isTencentAsr ||
     isAdminEntry ||
@@ -887,6 +890,8 @@ export default function AidconfigPage() {
           )}
           {isImageModeration ? (
             <ImageModerationSection />
+          ) : isImageDetection ? (
+            <ImageDetectionSection />
           ) : isMediaProcess ? (
             <MediaProcessSection />
           ) : isTencentAsr ? (

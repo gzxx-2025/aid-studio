@@ -508,6 +508,8 @@ export const StoryScript = forwardRef<StoryScriptHandle, Props>(function StorySc
       <Drawer
         open={showHistoryPanel}
         onClose={() => setShowHistoryPanel(false)}
+        destroyOnHidden
+        styles={{ mask: { pointerEvents: showHistoryPanel ? 'auto' : 'none' } }}
         placement="right"
         size={440}
         rootClassName="create-theme-drawer"

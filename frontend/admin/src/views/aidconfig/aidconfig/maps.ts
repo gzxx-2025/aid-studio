@@ -25,6 +25,7 @@ export const CATEGORY_NAMES: Record<string, string> = {
   storyboard: '分镜配置',
   project_gen_config: '项目生成配置',
   image_moderation: '图片内容安全审查',
+  image_object_detection: '图像识别 / 视觉服务',
   login_policy: '登录与在线策略',
   account_security: '账号安全',
   admin_entry: '后台登录入口',
@@ -63,6 +64,7 @@ export const CONFIG_SECTIONS: ConfigSection[] = [
   { key: 'ai', name: 'AI 与生成', categories: ['agent_model', 'project_gen_config', 'storyboard'] },
   { key: 'voice', name: '配音设置', categories: ['voice'] },
   { key: 'moderation', name: '内容安全', categories: ['image_moderation'] },
+  { key: 'vision', name: '图像识别', categories: ['image_object_detection'] },
   { key: 'promotion', name: '营销活动', categories: ['register_bonus', 'invite'] }
 ];
 
