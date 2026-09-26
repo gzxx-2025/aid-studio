@@ -19,7 +19,7 @@ Use the setup instructions in [README](README.md#本地开发), [English README]
 
 - **Backend:** Java 17 and Maven. Controllers belong in `aid-business`, domain services and persistence in `aid-interface`, and shared infrastructure in `aid-common`.
 - **Frontends:** the public repository places the admin interface in `frontend/admin` and creator interface in `frontend/web`. Use the Node version, lockfile and scripts declared by each package.
-- **Provider integrations:** link to the official protocol documentation. Reuse existing provider interfaces, task scheduling, capability validation and billing; do not create a separate task or balance system for one provider.
+- **Provider integrations:** follow the [public provider integration guide](doc/public-provider-integration.md) / [公开 Provider 接入指南](doc/公开Provider接入指南.md). Link to the official protocol documentation. Reuse existing provider interfaces, task scheduling, capability validation and billing; do not create a separate task or balance system for one provider.
 - **Database changes:** support MySQL 5.7, keep migrations repeatable, preserve existing user settings and document initialization and upgrade effects.
 - **Translations:** keep Chinese and English setup requirements, limitations, commands and links consistent. Do not claim that a feature is implemented or verified without evidence.
 

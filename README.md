@@ -394,6 +394,7 @@ aid-studio（Maven 多模块单体）
 | [部署指南](deploy/README.md) | Docker / systemd 部署、配置项、HTTPS、中间件、升级、回退与卸载 |
 | [English guide](README.en.md) | English overview, installation, first project and maintenance |
 | [贡献指南](CONTRIBUTING.md) | 问题报告、改动范围、开发验证与 PR 提交 |
+| [公开 Provider 接入指南](doc/公开Provider接入指南.md) | 文本 / 图片 / 视频 / 语音 Provider 入口、能力声明、统一任务与计费、官方协议核验与提交检查（[English](doc/public-provider-integration.md)） |
 | [获取帮助](SUPPORT.md) | 使用、部署和模型配置问题的反馈入口 |
 | [安全报告](SECURITY.md) | 私密报告漏洞，避免公开敏感细节 |
 | [社区行为准则](CODE_OF_CONDUCT.md) | 交流与协作约定 |
@@ -409,7 +410,7 @@ aid-studio（Maven 多模块单体）
 
 ## 参与贡献
 
-欢迎中文或英文 Issue 与 Pull Request。先阅读[贡献指南](CONTRIBUTING.md)与[社区行为准则](CODE_OF_CONDUCT.md)，再选择适合自己的贡献：复现问题、改进文档、修复缺陷或适配公开模型协议。
+欢迎中文或英文 Issue 与 Pull Request。先阅读[贡献指南](CONTRIBUTING.md)、[公开 Provider 接入指南](doc/公开Provider接入指南.md)与[社区行为准则](CODE_OF_CONDUCT.md)，再选择适合自己的贡献：复现问题、改进文档、修复缺陷或适配公开模型协议。
 
 - [报告问题 / 提出建议](https://github.com/gzxx-2025/aid-studio/issues/new/choose)
 - [查找适合首次贡献的任务](https://github.com/gzxx-2025/aid-studio/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)

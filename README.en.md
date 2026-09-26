@@ -168,6 +168,7 @@ The backend uses Java 17, Spring Boot 3.5, MyBatis-Plus, MySQL 5.7 and Redis. Ro
 - [Support](SUPPORT.md): installation, configuration and usage questions.
 - [Issues](https://github.com/gzxx-2025/aid-studio/issues/new/choose): reproducible bugs and feature requests, in Chinese or English.
 - [Contributing](CONTRIBUTING.md): documentation, translations, fixes and public model integrations.
+- [Public provider integration guide](doc/public-provider-integration.md): text / image / video / audio entry points, capabilities, shared tasks and billing ([中文](doc/公开Provider接入指南.md)).
 - [Code of conduct](CODE_OF_CONDUCT.md): expectations for community participation.
 - [Security policy](SECURITY.md): report vulnerabilities privately.
 - [Community chat](README.md#交流与反馈): Chinese-language open-source discussion and technical support, with no advertising or hidden charges.

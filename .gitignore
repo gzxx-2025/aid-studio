@@ -72,10 +72,13 @@ CLAUDE.md
 
 # 内部文档目录：默认不入库；接口文档 Business-API.md 入私有仓做版本管理
 # （发布时由 .gitattributes 的 export-ignore 排除，不会进开源快照）；
-# 提示词开发指南入库且随开源快照发布（后台智能体开发页教程入口指向它）
+# 提示词开发指南入库且随开源快照发布（后台智能体开发页教程入口指向它）；
+# 公开 Provider 接入指南随开源快照发布，供外部贡献者复用现有编排
 /doc/*
 !/doc/Business-API.md
 !/doc/提示词开发指南.md
+!/doc/公开Provider接入指南.md
+!/doc/public-provider-integration.md
 
 # 发布构建产物（deploy/release.ps1 输出，附件上传 Release 后即可清理）
 /release-build/

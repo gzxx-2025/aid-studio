@@ -5,9 +5,12 @@ release/*.json text eol=lf
 model-catalog/tokendance/*.json -text
 
 # 发布排除：doc/ 只进私有仓做版本管理，git archive 生成的开源发布快照不包含；
-# 提示词开发指南面向开源搭建者（后台智能体开发页教程入口指向它），单独放行
+# 提示词开发指南面向开源搭建者（后台智能体开发页教程入口指向它），单独放行；
+# 公开 Provider 接入指南面向外部贡献者，随开源快照发布
 /doc/** export-ignore
 "/doc/提示词开发指南.md" -export-ignore
+"/doc/公开Provider接入指南.md" -export-ignore
+/doc/public-provider-integration.md -export-ignore
 
 # 二进制文件不做任何转换
 *.jar binary
