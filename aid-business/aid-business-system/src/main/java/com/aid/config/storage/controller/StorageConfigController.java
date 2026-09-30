@@ -25,6 +25,9 @@ import com.aid.common.core.controller.BaseController;
 import com.aid.common.core.domain.AjaxResult;
 import com.aid.common.enums.BusinessType;
 import com.aid.config.storage.dto.StorageConfigSaveRequest;
+import com.aid.config.test.tester.OssConnectivityTester;
+import com.aid.common.config.test.ConfigTestRequest;
+import com.aid.common.config.test.ConfigTestResult;
 import com.aid.compose.ComposeConstants;
 import com.aid.media.enums.MediaTaskStatus;
 
@@ -47,6 +50,7 @@ public class StorageConfigController extends BaseController
     private final IAidConfigService aidConfigService;
     private final OssConfigManager ossConfigManager;
     private final AidMediaTaskMapper aidMediaTaskMapper;
+    private final OssConnectivityTester ossConnectivityTester;
 
     /** 读取文件存储配置；所有访问密钥仅返回脱敏值。 */
     @PreAuthorize("@ss.hasPermi('aidconfig:aidconfig:edit')")
@@ -133,6 +137,17 @@ public class StorageConfigController extends BaseController
         }
         request.setUploadMode(mode);
         normalizeDomain(request.getResourceAccessDomain());
+        if ("local".equals(mode))
+        {
+            ConfigTestRequest probe = new ConfigTestRequest();
+            probe.setPayload(Map.of("uploadMode", mode,
+                    "resourceAccessDomain", StrUtil.trimToEmpty(request.getResourceAccessDomain())));
+            ConfigTestResult result = ossConnectivityTester.test(probe);
+            if (!result.isSuccess())
+            {
+                throw new IllegalArgumentException(result.getMessage());
+            }
+        }
         Integer hours = request.getModelSignedUrlExpireHours();
         if (hours == null || hours < 1 || hours > 168)
         {

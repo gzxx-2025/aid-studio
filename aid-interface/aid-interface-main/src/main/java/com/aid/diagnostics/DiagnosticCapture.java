@@ -153,6 +153,9 @@ public class DiagnosticCapture {
     public void finish(Context context,Object response,Throwable error,boolean failed,String source) {
         if(context==null) return;
         try {
+            // 成功的顶层请求不会持久化诊断，避免在返回业务结果前展开整个响应。
+            // 供应商子上下文仍保留响应，供父级失败时关联调用链。
+            if(context.parent==null && error==null && !failed && !context.failed) return;
             if(error!=null) {
                 StringWriter stack=new StringWriter();error.printStackTrace(new PrintWriter(stack));
                 context.data.put("exception",sanitizer.clean(Map.of("type",error.getClass().getName(),"stack",stack.toString())));

@@ -34,6 +34,11 @@ public interface IAiModelConfigService {
      */
     AiModelConfigVo selectByModelCodeForUser(String modelCode, Long userId);
 
+    /** Resolve the capability used by a user's read-only quote without dropping user-level configuration. */
+    default AiModelConfigVo selectByModelCodeForUser(String modelCode, Long userId, String capabilityCode) {
+        return selectByModelCodeForUser(modelCode, userId);
+    }
+
     /** 已建任务按原模型记录解析凭证，模型停用不取消原任务的查询。 */
     default AiModelConfigVo selectTaskCredentials(Long modelId, String modelCode, Long userId) {
         return selectByModelCodeForUser(modelCode, userId);

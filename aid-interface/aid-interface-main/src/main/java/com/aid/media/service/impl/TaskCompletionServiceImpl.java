@@ -206,15 +206,11 @@ public class TaskCompletionServiceImpl implements TaskCompletionService {
                 }
             }
         } else {
-            TaskErrorResult error = taskResult.getTaskError();
-            if (Objects.isNull(error)) {
-                error = ErrorNormalizer.normalize(String.valueOf(taskId), null, task.getModelName(), -1,
-                        StrUtil.blankToDefault(taskResult.getRawErrorMessage(), taskResult.getErrorMessage()));
-            }
+            TaskErrorResult error = normalizeProviderFailure(taskId, task.getModelName(), taskResult);
             casWrapper.set(AidMediaTask::getErrorDetailJson,
                     TextFailureBillingPolicy.mergeErrorSnapshot(task.getErrorDetailJson(), error));
             casWrapper.set(AidMediaTask::getErrorMessage,
-                MediaTaskPayloadSanitizer.sanitizeForStorage(taskResult.getErrorMessage()));
+                MediaTaskPayloadSanitizer.sanitizeForStorage(error.getUserMessage()));
         }
         casWrapper.set(AidMediaTask::getResponseJson, preparedPayload.getResponseJson());
 
@@ -329,6 +325,21 @@ public class TaskCompletionServiceImpl implements TaskCompletionService {
             aidMediaResultMapper.upsertTaskResult(
                     task.getId(), index, task.getMediaType(), resultUrls.get(index), operator);
         }
+    }
+
+    /** Keep structured provider errors through polling/callback terminal persistence. */
+    static TaskErrorResult normalizeProviderFailure(Long taskId, String model, ProviderTaskResult result) {
+        TaskErrorResult explicit = result.getTaskError();
+        if (!com.aid.common.error.TaskErrorPresentation.isGeneric(explicit)) return explicit;
+        String raw = StrUtil.blankToDefault(result.getRawErrorMessage(), result.getErrorMessage());
+        TaskErrorResult text = ErrorNormalizer.classify(null, model, -1, raw);
+        TaskErrorResult response = ErrorNormalizer.classify(null, model, -1, result.getRawResponse());
+        if (!com.aid.common.error.TaskErrorPresentation.isGeneric(response)
+                && com.aid.common.error.TaskErrorPresentation.specificity(response)
+                >= com.aid.common.error.TaskErrorPresentation.specificity(text)) {
+            raw = result.getRawResponse();
+        }
+        return ErrorNormalizer.normalize(String.valueOf(taskId), null, model, -1, raw);
     }
 
     private static List<String> normalizeResultUrls(ProviderTaskResult taskResult) {

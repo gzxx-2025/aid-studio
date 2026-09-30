@@ -267,7 +267,7 @@ export type StoryboardVideoSettingsScopeSnapshot = {
   videoModel: string
   /** 生成视频提示词用的文本 modelCode；未选则不传接口 */
   videoPromptModelCode: string
-  aspectRatio: '16:9' | '9:16' | '4:3' | '1:1'
+  aspectRatio: string
   /** 清晰度档（如 720p / 1080p / 1k），与模型 capability.sizeOptions 对齐 */
   resolution: string
   /** 出片时长（秒），批量/编辑弹窗共用 */

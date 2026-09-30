@@ -116,7 +116,7 @@ public class ErrorRuleEngine {
             if (code.isEmpty()) {
                 continue;
             }
-            if (hasCode(lower, code)) {
+            if (code.matches("[0-9]+") ? matchNumericCode(code, rawMessage) : hasCode(lower, code)) {
                 return true;
             }
         }
@@ -124,7 +124,7 @@ public class ErrorRuleEngine {
     }
 
     /**
-     * 检测 lower 中是否存在完整数字 code（前后非数字字符）。
+     * 检测完整 code，不能命中请求 ID 或其他标识符中的片段。
      */
     private boolean hasCode(String lower, String code) {
         if (lower == null || lower.isEmpty() || code == null || code.isEmpty()) {
@@ -136,15 +136,36 @@ public class ErrorRuleEngine {
             if (idx < 0) {
                 return false;
             }
-            boolean leftOk = idx == 0 || !Character.isDigit(lower.charAt(idx - 1));
+            boolean leftOk = idx == 0 || !Character.isLetterOrDigit(lower.charAt(idx - 1));
             int end = idx + code.length();
-            boolean rightOk = end >= lower.length() || !Character.isDigit(lower.charAt(end));
+            boolean rightOk = end >= lower.length() || !Character.isLetterOrDigit(lower.charAt(end));
             if (leftOk && rightOk) {
                 return true;
             }
             from = idx + 1;
         }
         return false;
+    }
+
+    /** 数字规则只检查错误码或错误文案，不能扫描 JSON 中的 request_id 等元数据。 */
+    private boolean matchNumericCode(String code, String rawMessage) {
+        try {
+            JsonNode root = MAPPER.readTree(rawMessage);
+            if (root == null) return false;
+            if (root.isValueNode()) return hasCode(root.asText(), code);
+            for (String path : new String[]{"/code", "/error/code", "/status_code", "/error/status_code",
+                    "/statusCode", "/error/statusCode", "/http_status", "/httpStatus"}) {
+                JsonNode value = root.at(path);
+                if (value.isValueNode() && code.equals(value.asText())) return true;
+            }
+            for (String path : new String[]{"/message", "/msg", "/error/message", "/error/msg", "/error"}) {
+                JsonNode value = root.at(path);
+                if (value.isTextual() && hasCode(value.asText(), code)) return true;
+            }
+            return false;
+        } catch (Exception ignored) {
+            return hasCode(rawMessage, code);
+        }
     }
 
     /** KEYWORD：逗号分隔，任一关键字命中即匹配 */
@@ -158,7 +179,7 @@ public class ErrorRuleEngine {
             if (kw.isEmpty()) {
                 continue;
             }
-            if (haystack.contains(kw)) {
+            if (kw.matches("[0-9]+") ? matchNumericCode(kw, rawMessage) : haystack.contains(kw)) {
                 return true;
             }
         }

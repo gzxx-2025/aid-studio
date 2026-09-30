@@ -67,10 +67,15 @@ public final class MediaBytesFetcher {
      * @return 抓取结果；失败返回空结果
      */
     public static Content fetch(String fullUrl, int maxBytes) {
-        if (StrUtil.isBlank(fullUrl) || maxBytes <= 0) {
+        return fetch(fullUrl, maxBytes, TIMEOUT_MS);
+    }
+
+    /** Use a caller-specific timeout for required assets while retaining the short default for optional probes. */
+    public static Content fetch(String fullUrl, int maxBytes, int timeoutMs) {
+        if (StrUtil.isBlank(fullUrl) || maxBytes <= 0 || timeoutMs <= 0) {
             return EMPTY;
         }
-        try (HttpResponse response = HttpUtil.createGet(fullUrl).timeout(TIMEOUT_MS).execute()) {
+        try (HttpResponse response = HttpUtil.createGet(fullUrl).timeout(timeoutMs).execute()) {
             if (!response.isOk()) {
                 log.warn("媒体字节下载失败, url={}, status={}", fullUrl, response.getStatus());
                 return EMPTY;

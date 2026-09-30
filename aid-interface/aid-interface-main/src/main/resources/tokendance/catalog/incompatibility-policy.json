@@ -12,6 +12,9 @@
     "mimo-v2.5-tts-voiceclone": { "reason": "不兼容 AID：克隆样本链路未通过验证", "importBlocked": true },
     "minimax-speech-2.8-hd": { "reason": "不兼容 AID：配音链路未通过验证", "importBlocked": true },
     "minimax-speech-2.8-turbo": { "reason": "不兼容 AID：配音链路未通过验证", "importBlocked": true },
-    "seed-tts-2.0": { "reason": "不兼容 AID：配音链路未通过验证", "importBlocked": true }
+    "seed-tts-2.0": { "reason": "不兼容 AID：配音链路未通过验证", "importBlocked": true },
+    "deepseek-v4-flash": { "reason": "上游已停用旧型号，请使用 deepseek-flash", "importBlocked": true },
+    "deepseek-v4-flash-0731": { "reason": "上游已停用旧型号，请使用 deepseek-flash", "importBlocked": true },
+    "deepseek-v4-flash-vision-exp": { "reason": "上游已停用旧型号，请使用 deepseek-flash", "importBlocked": true }
   }
 }

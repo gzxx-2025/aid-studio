@@ -81,6 +81,29 @@ export interface SceneModalImageListApi {
   }) => number
 }
 
+/** 与列表接口使用同一映射，拆分响应可在列表短暂不可见时立即补齐生成记录。 */
+export function mapFormImageRowToLocalImage(row: any, formIdFallback: number, orderIndex: number) {
+  const idRaw = Number(row?.id)
+  const id = Number.isFinite(idRaw) ? `img-${idRaw}` : `form-${formIdFallback}-${orderIndex}`
+  const url = String(row?.imageUrl || '').trim()
+  return {
+    id,
+    url,
+    thumbnail: url,
+    title: String(row?.name || '').trim() || `形态图${orderIndex + 1}`,
+    source: 'server',
+    importDate: String(row?.updateTime || row?.createTime || '') || '',
+    angles: [],
+    rpsFormId: Number(row?.formId ?? formIdFallback),
+    rpsImageId: Number(row?.id ?? NaN),
+    promptText: typeof row?.promptText === 'string' ? row.promptText : null,
+    referenceImages: Array.isArray(row?.referenceImages) ? [...row.referenceImages] : [],
+    _serverSourceType: String(row?.sourceType || '').trim() || undefined,
+    _isSet: Number(row?.isUse) === 1,
+    canSplit: row?.canSplit === true
+  }
+}
+
 export function useSceneModalImageList(ctx: EditSceneImageModalCtx): SceneModalImageListApi {
   const { buildVisibleImagesForParent, emitSceneTabUpdate, reserveSetRpsForm, reserveUnsetRpsForm, resolveImageIdFromFormImageList, syncImageToRpsApi, syncLocalSceneImagesFromSceneIndex } = createSceneModalImagePersistenceOps(ctx)
   function normalizeMainImageFlags(images: any[], focusImageId?: number | null) {
@@ -179,31 +202,6 @@ export function useSceneModalImageList(ctx: EditSceneImageModalCtx): SceneModalI
   function buildInitFormImageListKey() {
     const formIds = ctx.activeRpsFormIds() ?? []
     return `${ctx.props().imageType}|${ctx.currentSceneIndex.get()}|${ctx.activeRpsAssetId() ?? ''}|${Array.isArray(formIds) ? formIds.join(',') : ''}`
-  }
-
-  function mapFormImageRowToLocalImage(row: any, formIdFallback: number, orderIndex: number) {
-    const idRaw = Number(row?.id)
-    const id = Number.isFinite(idRaw) ? `img-${idRaw}` : `form-${formIdFallback}-${orderIndex}`
-    const url = String(row?.imageUrl || '').trim()
-    return {
-      id,
-      url,
-      thumbnail: url,
-      title: String(row?.name || '').trim() || `形态图${orderIndex + 1}`,
-      source: 'server',
-      importDate: String(row?.updateTime || row?.createTime || '') || '',
-      angles: [],
-      rpsFormId: Number(row?.formId ?? formIdFallback),
-      rpsImageId: Number(row?.id ?? NaN),
-      promptText: typeof row?.promptText === 'string' ? row.promptText : null,
-      referenceImages: Array.isArray(row?.referenceImages) ? [...row.referenceImages] : [],
-      /** 服务端 sourceType（如 ai_auto / ai_builder），用于设定卡参考图校验 */
-      _serverSourceType: String(row?.sourceType || '').trim() || undefined,
-      // 本弹窗内部标记：仅当接口返回 isUse=1 时才认为“已设置”
-      _isSet: Number(row?.isUse) === 1,
-      /** 是否可拆分四宫格（scene 且未拆过、非拆分产物） */
-      canSplit: row?.canSplit === true
-    }
   }
 
   /**

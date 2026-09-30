@@ -84,6 +84,9 @@ public enum TaskErrorCode {
     /** 上游参数错误（HTTP 400） */
     UPSTREAM_BAD_REQUEST("PROVIDER", "UPSTREAM_TECH", "本次生成未完成", false, null, false),
 
+    /** 已提交任务的 MiniMax H3 查询地址返回 404，无法继续轮询。 */
+    UPSTREAM_QUERY_NOT_FOUND("PROVIDER", "UPSTREAM_TECH", "上游查询接口不存在或任务已失效，请联系管理员", false, null, false),
+
     /** 当前生成参数与所选模型能力不兼容 */
     MODEL_PARAMETER_INCOMPATIBLE("PROVIDER", "UPSTREAM_TECH", "当前生成设置不受支持，调整后重试", false, null, false),
 

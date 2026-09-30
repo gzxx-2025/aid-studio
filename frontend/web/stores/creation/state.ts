@@ -199,7 +199,7 @@ export function createInitialCreationState() {
       agentId: '',
       videoModel: '',
       videoPromptModelCode: '',
-      aspectRatio: '16:9' as '16:9' | '9:16' | '4:3' | '1:1',
+      aspectRatio: '16:9' as string,
       resolution: '720p',
       durationSeconds: undefined as number | undefined,
       soundEffects: 'with-sound' as 'none' | 'with-sound'

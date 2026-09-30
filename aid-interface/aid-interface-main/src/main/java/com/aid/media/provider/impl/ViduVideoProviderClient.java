@@ -58,6 +58,7 @@ public class ViduVideoProviderClient implements VideoProviderClient {
 
     @Override
     public ProviderSubmitResult submit(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request) {
+        com.aid.media.provider.VideoProviderConfigurationValidator.validate(modelConfig);
         // Vidu 请求体没有参考音频字段，本 Provider 也从不下发 referenceAudios：正文里的 @音频N
         // 在 Vidu 侧必然是悬空引用（模型读到「参考音频1」却在整个请求里找不到任何音频），
         // 故固定按 0 条走统一的编号越界规则，与参考图同一套处理，不为音频单开分支。

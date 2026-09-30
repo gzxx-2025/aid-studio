@@ -24,7 +24,8 @@ const VIDEO_FALLBACK_SIZES = ['720p', '1080p'] as const
  */
 export function resolveStudioParamsPanelOptions(
   mode: 'image' | 'video',
-  model?: UserModelListItem | null
+  model?: UserModelListItem | null,
+  allowAutomaticDuration = false
 ): {
   snapshot: ModelCapabilitySnapshot
   ratioOptions: SelectOption<string>[]
@@ -33,7 +34,7 @@ export function resolveStudioParamsPanelOptions(
   durationOptions: SelectOption<string>[]
   supportsDuration: boolean
 } {
-  const parsed = parseModelCapability(model)
+  const parsed = parseModelCapability(model, undefined, allowAutomaticDuration)
   // parseModelCapability(null) 会填入图片清晰度默认档；视频无模型时改用视频档
   const snapshot: ModelCapabilitySnapshot = mode === 'video' && !model
     ? {

@@ -12,6 +12,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -24,7 +25,9 @@ import java.util.Locale;
  */
 @Slf4j
 public final class ImageEditAssetSupport {
+    private static final int MAX_RESULT_EDGE_FEATHER_PIXELS = 12;
     public static final int MAX_INPUT_BYTES = 50 * 1024 * 1024;
+    private static final int REQUIRED_IMAGE_TIMEOUT_MS = 15_000;
     /** 解码保护上限，模型自身的更小尺寸限制仍由能力 Schema/Provider 单独校验。 */
     public static final long MAX_PIXELS = 20_000_000L;
 
@@ -62,7 +65,10 @@ public final class ImageEditAssetSupport {
         }
         byte[] bytes = dataUri(source);
         if (bytes == null) {
-            MediaBytesFetcher.Content content = MediaBytesFetcher.fetch(source, MAX_INPUT_BYTES);
+            MediaBytesFetcher.Content content = MediaBytesFetcher.fetch(source, MAX_INPUT_BYTES, REQUIRED_IMAGE_TIMEOUT_MS);
+            if (content.isEmpty()) {
+                content = MediaBytesFetcher.fetch(source, MAX_INPUT_BYTES, REQUIRED_IMAGE_TIMEOUT_MS);
+            }
             if (content.isEmpty() || content.truncated()) {
                 log.warn("图片编辑素材读取失败, label={}, truncated={}", label, content.truncated());
                 throw new ServiceException(label + "读取失败");
@@ -204,6 +210,7 @@ public final class ImageEditAssetSupport {
         BufferedImage source = protection.source();
         BufferedImage generated = decode(generatedBytes, "生成结果");
         if (isOutpainting(request)) {
+            generated = fitCanvas(generated, request.getTargetWidth(), request.getTargetHeight());
             validateExpand(request, source, generated);
             BufferedImage output = new BufferedImage(generated.getWidth(), generated.getHeight(),
                     BufferedImage.TYPE_INT_ARGB);
@@ -212,17 +219,80 @@ public final class ImageEditAssetSupport {
             return png(output);
         }
         BufferedImage mask = protection.mask();
-        requireSameSize(source, generated);
+        generated = fitCanvas(generated, source.getWidth(), source.getHeight());
         BufferedImage output = new BufferedImage(generated.getWidth(), generated.getHeight(),
                 BufferedImage.TYPE_INT_ARGB);
+        int featherRadius = Math.min(MAX_RESULT_EDGE_FEATHER_PIXELS,
+                Math.min(source.getWidth(), source.getHeight()) / 16);
+        byte[] innerDistance = featherRadius == 0 ? null
+                : innerEditDistance(mask, protection.alphaEncoding(), featherRadius);
         for (int y = 0; y < output.getHeight(); y++) {
             for (int x = 0; x < output.getWidth(); x++) {
                 int maskArgb = mask.getRGB(x, y);
                 int edit = editAmount(maskArgb, protection.alphaEncoding());
+                if (innerDistance != null && edit == 255) {
+                    int distance = innerDistance[y * output.getWidth() + x] & 0xff;
+                    if (distance <= featherRadius) {
+                        edit = (255 * distance + featherRadius / 2) / (featherRadius + 1);
+                    }
+                }
                 output.setRGB(x, y, blend(source.getRGB(x, y), generated.getRGB(x, y), edit));
             }
         }
         return png(output);
+    }
+
+    /** Blend only inside the selected pixels so every protected source pixel remains unchanged. */
+    private static byte[] innerEditDistance(BufferedImage mask, boolean alphaEncoding, int radius) {
+        int width = mask.getWidth();
+        int height = mask.getHeight();
+        byte[] distance = new byte[width * height];
+        int full = radius + 1;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = y * width + x;
+                if (editAmount(mask.getRGB(x, y), alphaEncoding) == 0) continue;
+                int value = full;
+                if (x > 0) value = Math.min(value, (distance[index - 1] & 0xff) + 1);
+                if (y > 0) value = Math.min(value, (distance[index - width] & 0xff) + 1);
+                distance[index] = (byte) value;
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int index = y * width + x;
+                int value = distance[index] & 0xff;
+                if (value == 0) continue;
+                if (x + 1 < width) value = Math.min(value, (distance[index + 1] & 0xff) + 1);
+                if (y + 1 < height) value = Math.min(value, (distance[index + width] & 0xff) + 1);
+                distance[index] = (byte) value;
+            }
+        }
+        return distance;
+    }
+
+    /** Whole-image canvas edits keep the original node geometry while retaining the provider image content. */
+    public static byte[] fitWholeImageResult(BufferedImage source, byte[] generatedBytes) {
+        if (source == null) throw new ServiceException("原图不能为空");
+        BufferedImage generated = decode(generatedBytes, "生成结果");
+        return png(fitCanvas(generated, source.getWidth(), source.getHeight()));
+    }
+
+    private static BufferedImage fitCanvas(BufferedImage generated, int width, int height) {
+        if (width <= 0 || height <= 0 || (long) width * height > MAX_PIXELS) {
+            throw new ServiceException("图片编辑目标尺寸无效");
+        }
+        if (generated.getWidth() == width && generated.getHeight() == height) return generated;
+        BufferedImage fitted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = fitted.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.drawImage(generated, 0, 0, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return fitted;
     }
 
     public static void validateExpand(MediaImageGenerateRequest request) {

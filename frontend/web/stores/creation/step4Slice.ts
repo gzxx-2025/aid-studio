@@ -50,7 +50,7 @@ export interface Step4Actions {
     agentId?: string
     videoModel?: string
     videoPromptModelCode?: string
-    aspectRatio?: '16:9' | '9:16' | '4:3' | '1:1'
+    aspectRatio?: string
     resolution?: string
     durationSeconds?: number | null
     soundEffects?: 'none' | 'with-sound'
@@ -403,7 +403,7 @@ export function createStep4Slice(set: CreationSet, get: CreationGet): Step4Actio
       agentId?: string
       videoModel?: string
       videoPromptModelCode?: string
-      aspectRatio?: '16:9' | '9:16' | '4:3' | '1:1'
+      aspectRatio?: string
       resolution?: string
       durationSeconds?: number | null
       soundEffects?: 'none' | 'with-sound'

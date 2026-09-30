@@ -15,6 +15,7 @@ import com.aid.aid.mapper.AidAiModelProtocolBindingMapper;
 import com.aid.aid.service.IAidAiModelService;
 import com.aid.aid.service.IAidAiProviderService;
 import com.aid.aid.service.support.ModelBillingRuleValidator;
+import com.aid.aid.service.support.MediaCapabilityNormalizer;
 import com.aid.common.exception.ServiceException;
 import com.aid.common.utils.DateUtils;
 import com.aid.common.utils.ProviderEndpointUtils;
@@ -56,7 +57,7 @@ public class ModelDefinitionService {
             List<ModelCapabilityDefinition> configured = rows.stream().filter(row -> Objects.equals(row.getModelId(), model.getId())).map(row -> {
                 var definition = JSON.parseObject(row.getDefinitionJson(), ModelCapabilityDefinition.class);
                 definition.setBindings(routes.stream().filter(route -> Objects.equals(route.getModelId(), model.getId()) && Objects.equals(route.getCapabilityCode(), row.getCapabilityCode()))
-                        .map(route -> JSON.parseObject(route.getDefinitionJson(), ModelProtocolBinding.class)).toList());
+                        .map(route -> parseBinding(route.getDefinitionJson())).toList());
                 return definition;
             }).toList();
             model.setStructuredCapabilities(!configured.isEmpty());
@@ -76,10 +77,17 @@ public class ModelDefinitionService {
         for (AidAiModelCapability row : rows) {
             ModelCapabilityDefinition definition = JSON.parseObject(row.getDefinitionJson(), ModelCapabilityDefinition.class);
             definition.setBindings(routes.stream().filter(r -> Objects.equals(r.getCapabilityCode(), row.getCapabilityCode()))
-                    .map(r -> JSON.parseObject(r.getDefinitionJson(), ModelProtocolBinding.class)).toList());
+                    .map(r -> parseBinding(r.getDefinitionJson())).toList());
             result.add(definition);
         }
         return result;
+    }
+
+    static ModelProtocolBinding parseBinding(String json) {
+        ModelProtocolBinding binding = JSON.parseObject(json, ModelProtocolBinding.class);
+        binding.setCapability(MediaCapabilityNormalizer.normalize(binding.getCapability()));
+        binding.setPresentation(MediaCapabilityNormalizer.normalize(binding.getPresentation()));
+        return binding;
     }
 
     /**
@@ -175,6 +183,7 @@ public class ModelDefinitionService {
 
     @Transactional(rollbackFor = Exception.class)
     public int save(AidAiModel model, boolean create) {
+        model.setCapabilityJson(MediaCapabilityNormalizer.normalizeJson(model.getCapabilityJson()));
         AidAiModel current = create ? null : models.getById(model.getId());
         if (!create && (current == null || !"0".equals(current.getDelFlag()))) fail("模型不存在，请重新打开统一模型配置");
         if (!create && (model.getProviderId() != null && !Objects.equals(model.getProviderId(), current.getProviderId())
@@ -215,6 +224,10 @@ public class ModelDefinitionService {
             for (var capability : model.getCapabilities()) {
                 if (capability.getBindings() == null) continue;
                 for (var route : capability.getBindings()) {
+                    if (route != null) {
+                        route.setCapability(MediaCapabilityNormalizer.normalize(route.getCapability()));
+                        route.setPresentation(MediaCapabilityNormalizer.normalize(route.getPresentation()));
+                    }
                     if (route != null && route.getBillingMode() == null)
                         route.setBillingMode(inheritedBillingMode);
                 }

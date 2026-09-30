@@ -485,6 +485,11 @@ public class AiOrchestrationServiceImpl implements IAiOrchestrationService
                     unchangedRelationCount++;
                 }
             }
+            if (!bind)
+            {
+                // 旧数据可能只有能力绑定而没有池内 ID；幂等解绑也必须清掉这层关系。
+                capabilityBindings.removeForModels(pool.getFuncCode(), modelIds);
+            }
             if (changedForPool == 0 && staleModelCount == 0)
             {
                 continue;
@@ -505,6 +510,20 @@ public class AiOrchestrationServiceImpl implements IAiOrchestrationService
                     .filter(entry -> !currentIds.contains(entry.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
                             (left, right) -> left, LinkedHashMap::new));
+            if (bind)
+            {
+                for (Long newlyBoundId : nextIds)
+                {
+                    if (currentIds.contains(newlyBoundId)) continue;
+                    boolean structured = modelCapabilityMapper.selectCount(
+                            Wrappers.<AidAiModelCapability>lambdaQuery()
+                                    .eq(AidAiModelCapability::getModelId, newlyBoundId)) > 0;
+                    if (structured && !selectionsForPool.containsKey(newlyBoundId))
+                    {
+                        throw new ServiceException("重新绑定模型池时请重新选择模型能力");
+                    }
+                }
+            }
             capabilityBindings.reconcile(next, operator, selectionsForPool);
             AidAiModelFuncConfig update = new AidAiModelFuncConfig();
             update.setId(pool.getId());

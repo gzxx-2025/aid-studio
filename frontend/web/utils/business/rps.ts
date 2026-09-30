@@ -169,7 +169,14 @@ export async function userAssetRpsFormImageSceneSplit(
     '/api/user/asset/rps/form-image/scene/split',
     body
   )
-  return unwrap(res)
+  const data = unwrap(res)
+  if (data.summary?.successCount > 0) {
+    // A successful split changes the same form-image list that the editor reads next.
+    // Detach earlier in-flight reads as well as the short burst cache.
+    rpsFormImageListInflight.clear()
+    rpsFormImageListBurst.current = null
+  }
+  return data
 }
 
 /** 形态图高清（异步）：POST /api/user/asset/rps/form-image/upscale（v2.24+） */

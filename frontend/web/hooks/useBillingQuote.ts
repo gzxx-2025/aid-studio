@@ -51,8 +51,8 @@ function extractErrorMessage(error: unknown): string {
 }
 
 /**
- * 对生成请求做防抖权威报价。参数变化时立即清除旧报价；取消请求和请求序号共同防止竞态回写。
- * 报价失败只返回提示状态，不改变调用方提交按钮状态。请求和结果均不进入模块级缓存。
+ * 对生成请求做防抖权威报价。参数变化时清除旧报价并取消当前订阅，网络请求按业务键合并。
+ * 请求序号防止竞态回写；报价失败只返回提示状态，不改变调用方提交按钮状态。
  */
 export function useBillingQuote(
   request: BillingQuoteRequest | null,
@@ -67,6 +67,7 @@ export function useBillingQuote(
     [serializedRequest]
   )
   const sequenceRef = useRef(0)
+  const forceNextRef = useRef(false)
   const controllerRef = useRef<AbortController | null>(null)
   const timerRef = useRef<number | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -92,6 +93,7 @@ export function useBillingQuote(
   }, [cancelPending])
 
   const refresh = useCallback(() => {
+    forceNextRef.current = true
     cancelPending()
     sequenceRef.current += 1
     setQuote(null)
@@ -117,7 +119,9 @@ export function useBillingQuote(
     setLoading(true)
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
-      void userBillingQuote(current, { signal: controller.signal })
+      const force = forceNextRef.current
+      forceNextRef.current = false
+      void userBillingQuote(current, { signal: controller.signal, force })
         .then((value) => {
           if (sequence !== sequenceRef.current || controller.signal.aborted) return
           setQuote(value)

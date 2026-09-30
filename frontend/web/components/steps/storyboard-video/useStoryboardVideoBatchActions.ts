@@ -7,7 +7,6 @@ import { useCreationStore } from '~/stores/creation'
 import type { StoryboardPanel,StoryboardVideoPanel } from '~/types'
 import type { BillingQuoteRequest } from '~/types/business-api'
 import { parseServerStoryboardId } from '~/composables/useStoryboardWorkbenchMutations'
-import { shouldPassStoryboardVideoDuration } from '~/utils/creationModeUiRules'
 import { shouldSilentStoryboardBatchToast } from '~/utils/taskSseSilentDisconnect'
 import { storyboardApiErr } from './useStoryboardVideoPanelOps'
 
@@ -55,30 +54,26 @@ export function useStoryboardVideoBatchActions(opts: {
     mode: 'image' | 'video'
     selectedStoryboardIds: number[]
     videoModel?: string
+    aspectRatio?: string
     resolution?: string
     durationSeconds?: number
     soundEffects?: 'none' | 'with-sound'
   }) {
     if (payload.mode !== 'video') return
     const videoModel = String(payload.videoModel || '').trim()
+    const aspectRatio = String(payload.aspectRatio || '').trim()
     const resolution = String(payload.resolution || '')
       .trim()
       .toLowerCase()
-    const passDuration = shouldPassStoryboardVideoDuration(
-      useCreationStore.getState().formData.globalSetting?.creationMode
-    )
-    const durationSeconds = Number(payload.durationSeconds)
     const soundEffects =
       payload.soundEffects === 'with-sound' || payload.soundEffects === 'none'
         ? payload.soundEffects
         : 'none'
     useCreationStore.getState().setStoryboardVideoGenerateSettings({
       ...(videoModel ? { videoModel } : {}),
+      ...(aspectRatio ? { aspectRatio } : {}),
       ...(resolution ? { resolution } : {}),
-      soundEffects,
-      ...(passDuration && Number.isFinite(durationSeconds) && durationSeconds > 0
-        ? { durationSeconds }
-        : { durationSeconds: null })
+      soundEffects
     })
     await startBatchVideoGenerate(payload.selectedStoryboardIds, !!videoModel)
   }

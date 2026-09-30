@@ -25,6 +25,7 @@ import {
 } from '~/utils/creationModeUiRules'
 import { useVideoModelGenerateSettings } from '~/composables/useVideoModelGenerateSettings'
 import { mapUserModelListItemToModelOption } from '~/utils/userModelOption'
+import { pickMatchedOption } from '~/utils/modelCapability'
 import type { UserModelListItem } from '~/types/business-api'
 import type { RouteLikeLocation } from '~/types/routeLike'
 
@@ -68,7 +69,8 @@ export function useBatchStoryboardModels(options: {
   const videoQualityRef = useRef('1080p')
   const [videoDuration, setVideoDurationState] = useState('5')
   const videoDurationRef = useRef('5')
-  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
+  const projectAspectRatio = useCreationStore((state) => state.formData.globalSetting?.aspectRatio || '16:9')
+  const [videoAspectRatio, setVideoAspectRatio] = useState<string>(projectAspectRatio)
   const [videoCount, setVideoCount] = useState(1)
   const [videoAudio, setVideoAudioState] = useState('with_audio')
   const videoAudioRef = useRef('with_audio')
@@ -106,6 +108,7 @@ export function useBatchStoryboardModels(options: {
   const selectedVideoModel = resolveSelectedModelOption(videoModelOptions, videoModel)
 
   const {
+    capabilitySnapshot,
     qualitySelectOptions: videoQualityOptions,
     durationSelectOptions: videoDurationOptions,
     audioSelectOptions: videoAudioOptions,
@@ -349,7 +352,7 @@ export function useBatchStoryboardModels(options: {
       selectedModelCode: preferred,
       rawModelList: videoRawModelListRef.current,
       settings: {
-        aspectRatio: videoAspectRatio,
+        aspectRatio: useCreationStore.getState().formData.globalSetting?.aspectRatio || '16:9',
         count: videoCount,
         quality: nextQuality,
         duration: nextDuration,
@@ -373,6 +376,9 @@ export function useBatchStoryboardModels(options: {
     loadImageAgents,
     initImageModelSelection,
     videoModel,
+    projectAspectRatio,
+    // 批量生成没有独立比例选择：报价与确认均优先采用项目比例，再按模型能力校正。
+    videoAspectRatio: pickMatchedOption(projectAspectRatio, capabilitySnapshot.aspectRatioOptions, capabilitySnapshot.defaultAspectRatio),
     videoModelOptions,
     videoModelsLoading,
     videoModelDropdownExpanded,

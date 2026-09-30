@@ -15,6 +15,8 @@ import { useRouter } from 'next/navigation'
 import { Suspense,useEffect,useMemo,useRef,useState } from 'react'
 import tvIconRaw from '~/assets/img/icon/tv.svg'
 import SeriesProjectAssetCard from '~/components/create/SeriesProjectAssetCard'
+import { InfiniteScrollLoadFooter } from '~/components/common/InfiniteScrollLoadFooter'
+import { useInfiniteScrollPagination } from '~/hooks/useInfiniteScrollPagination'
 import { useRouteLike } from '~/hooks/useRouteLike'
 import { useCreationStore } from '~/stores/creation'
 import type { UserAssetApiType,UserAssetRow,UserEpisodeRow } from '~/types/business-api'
@@ -26,6 +28,7 @@ userAssetRpsList,
 userEpisodeCreate,
 userEpisodeDelete,
 userEpisodeList,
+userEpisodePage,
 userScriptDetailByProject
 } from '~/utils/businessApi'
 import { emptyImageIconUrl as assetCoverPlaceholderRaw } from '~/utils/emptyImageIcon'
@@ -95,14 +98,13 @@ function SeriesEpisodeListClient() {
 
   const [activeTab, setActiveTab] = useState<TabKey>('episodes')
   const activeTabRef = useRef<TabKey>('episodes')
-  const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [generatingEpisodeId, setGeneratingEpisodeId] = useState<number | null>(null)
   const generatingEpisodeIdRef = useRef<number | null>(null)
   const [deletingEpisodeId, setDeletingEpisodeId] = useState<number | null>(null)
   const deletingEpisodeIdRef = useRef<number | null>(null)
-  const [episodes, setEpisodes] = useState<UserEpisodeRow[]>([])
   const episodesRef = useRef<UserEpisodeRow[]>([])
+  const episodeScrollRootRef = useRef<HTMLDivElement>(null)
 
   const [projectAssets, setProjectAssets] = useState<UserAssetRow[]>([])
   const [projectAssetsLoading, setProjectAssetsLoading] = useState(false)
@@ -121,16 +123,6 @@ function SeriesEpisodeListClient() {
     setDeletingEpisodeId(id)
   }
 
-  function commitEpisodes(rows: UserEpisodeRow[]) {
-    episodesRef.current = rows
-    setEpisodes(rows)
-  }
-
-  const sortedEpisodes = useMemo(
-    () => [...episodes].sort((a, b) => (a.episodeNo ?? 0) - (b.episodeNo ?? 0)),
-    [episodes]
-  )
-
   const emptyAssetTips = (() => {
     if (activeTab === 'characters') return '暂无角色'
     if (activeTab === 'props') return '暂无道具'
@@ -146,6 +138,59 @@ function SeriesEpisodeListClient() {
       (Number.isFinite(routePid) && routePid > 0 ? routePid : null)
     return pid
   }
+
+  const fetchEpisodePage = async (pageNum: number, pageSize: number) => {
+    const pid = projectIdFromRoute()
+    if (!pid) {
+      useCreationStore.getState().setSeriesEpisodeListTotal(0)
+      return { rows: [], hasMore: false }
+    }
+    const page = await userEpisodePage({ projectId: pid, pageNum, pageSize })
+    if (projectIdFromRoute() === pid) {
+      useCreationStore.getState().setSeriesEpisodeListTotal(page.total)
+    }
+    return { rows: page.rows, hasMore: page.hasMore }
+  }
+  const {
+    items: episodes,
+    loading: episodesLoading,
+    loadingMore: episodesLoadingMore,
+    initialLoaded: episodesInitialLoaded,
+    loadError: episodesLoadError,
+    hasMore: episodesHasMore,
+    appendTick: episodesAppendTick,
+    reload: reloadEpisodes,
+    loadNextPage: loadNextEpisodePage,
+    setLoadMoreTrigger: setEpisodeLoadMoreTrigger
+  } = useInfiniteScrollPagination<UserEpisodeRow>(episodeScrollRootRef, fetchEpisodePage, {
+    pageSize: 20,
+    onError: (error, { reset }) => {
+      if (reset) {
+        episodesLoadedProjectIdRef.current = null
+        useCreationStore.getState().setSeriesEpisodeListTotal(0)
+      }
+      const err = error as { msg?: string; message?: string }
+      message.error(err?.msg || err?.message || (reset ? '加载分集失败' : '加载更多分集失败'))
+    }
+  })
+  const loading = episodesLoading || !episodesInitialLoaded
+  useEffect(() => {
+    episodesRef.current = episodes
+  }, [episodes])
+  const sortedEpisodes = useMemo(
+    () => [...episodes].sort((a, b) => (a.episodeNo ?? 0) - (b.episodeNo ?? 0)),
+    [episodes]
+  )
+  const previousEpisodeCountRef = useRef(0)
+  const [appendedEpisodeFromIndex, setAppendedEpisodeFromIndex] = useState<number | null>(null)
+  useEffect(() => {
+    if (episodesAppendTick > 0 && episodes.length > previousEpisodeCountRef.current) {
+      setAppendedEpisodeFromIndex(previousEpisodeCountRef.current)
+    } else if (episodes.length === 0) {
+      setAppendedEpisodeFromIndex(null)
+    }
+    previousEpisodeCountRef.current = episodes.length
+  }, [episodesAppendTick, episodes.length])
 
   function sortedEpisodesFromRef(): UserEpisodeRow[] {
     return [...episodesRef.current].sort((a, b) => (a.episodeNo ?? 0) - (b.episodeNo ?? 0))
@@ -247,28 +292,13 @@ function SeriesEpisodeListClient() {
     const pid = projectIdFromRoute()
     if (!pid) {
       episodesLoadedProjectIdRef.current = null
-      commitEpisodes([])
-      useCreationStore.getState().setSeriesEpisodeListTotal(0)
-      setLoading(false)
+      await reloadEpisodes()
       return
     }
     if (!opts?.force && episodesLoadedProjectIdRef.current === pid) return
     episodesLoadedProjectIdRef.current = pid
-    setLoading(true)
-    try {
-      const rows = await userEpisodeList({ projectId: pid })
-      commitEpisodes(rows)
-      useCreationStore.getState().setSeriesEpisodeListTotal(rows.length)
-    } catch (e: unknown) {
-      /** 失败时清除已加载标记，允许下一次触发重试 */
-      episodesLoadedProjectIdRef.current = null
-      const err = e as { msg?: string; message?: string }
-      message.error(err?.msg || err?.message || '加载分集失败')
-      commitEpisodes([])
-      useCreationStore.getState().setSeriesEpisodeListTotal(0)
-    } finally {
-      setLoading(false)
-    }
+    if (episodeScrollRootRef.current) episodeScrollRootRef.current.scrollTop = 0
+    await reloadEpisodes()
   }
 
   function onTabClick(key: TabKey) {
@@ -292,7 +322,7 @@ function SeriesEpisodeListClient() {
     }
     setAdding(true)
     try {
-      const sorted = sortedEpisodesFromRef()
+      const sorted = await userEpisodeList({ projectId: pid })
       const nextNo =
         sorted.length > 0 ? Math.max(...sorted.map((e) => e.episodeNo ?? 0)) + 1 : 1
       await userEpisodeCreate({
@@ -438,9 +468,13 @@ function SeriesEpisodeListClient() {
       </div>
 
       {activeTab === 'episodes' ? (
-        <div className="series-ep-list__body">
+        <div className="series-ep-list__body" ref={episodeScrollRootRef}>
           {loading ? (
             <div className="series-ep-list__loading">加载中…</div>
+          ) : episodesLoadError && episodes.length === 0 ? (
+            <div className="series-ep-list__empty">
+              加载分集失败，<button type="button" onClick={() => void loadEpisodes({ force: true })}>点击重试</button>
+            </div>
           ) : sortedEpisodes.length === 0 ? (
             <div className="series-ep-list__empty">暂无分集，点击「新增一集」开始</div>
           ) : (
@@ -469,8 +503,12 @@ function SeriesEpisodeListClient() {
                   操作
                 </span>
               </div>
-              {sortedEpisodes.map((ep) => (
-                <div key={ep.id} className="series-ep-list__row" role="row">
+              {sortedEpisodes.map((ep, index) => (
+                <div
+                  key={ep.id}
+                  className={`series-ep-list__row${appendedEpisodeFromIndex !== null && index >= appendedEpisodeFromIndex ? ' series-ep-list__row--appended' : ''}`}
+                  role="row"
+                >
                   <div className="series-ep-list__cell series-ep-list__cell--ep" role="cell">
                     <span className="series-ep-list__ep-inner">
                       <span className="series-ep-list__num">{ep.episodeNo ?? '—'}</span>
@@ -503,6 +541,19 @@ function SeriesEpisodeListClient() {
                   </div>
                 </div>
               ))}
+              <div ref={setEpisodeLoadMoreTrigger} className="series-ep-list__footer">
+                {episodesLoadError && episodesHasMore ? (
+                  <button type="button" onClick={() => void loadNextEpisodePage()}>加载失败，点击重试</button>
+                ) : (
+                  <InfiniteScrollLoadFooter
+                    loading={episodesLoadingMore}
+                    hasMore={episodesHasMore}
+                    hasItems
+                    loadingText="正在加载更多剧集…"
+                    endText="已加载全部剧集"
+                  />
+                )}
+              </div>
             </div>
           )}
         </div>

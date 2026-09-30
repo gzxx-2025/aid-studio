@@ -18,6 +18,9 @@ public class ImagePricingQuotePayload
             message = "生成模式无效")
     private String generateMode;
 
+    /** Optional draft text; legacy model-selection quotes use a neutral placeholder. */
+    private String prompt;
+
     private String size;
 
     private String resolution;

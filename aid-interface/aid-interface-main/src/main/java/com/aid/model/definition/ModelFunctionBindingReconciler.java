@@ -7,6 +7,7 @@ import com.aid.aid.domain.AidAiModelFuncConfig;
 import com.aid.aid.domain.model.ModelCapabilityDefinition;
 import com.aid.aid.mapper.AidAiBusinessModelBindingMapper;
 import com.aid.aid.mapper.AidAiModelCapabilityMapper;
+import com.aid.aid.service.IAidAiModelFuncConfigService;
 import com.aid.aid.service.IAidAiModelService;
 import com.aid.common.exception.ServiceException;
 import com.aid.common.utils.DateUtils;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ModelFunctionBindingReconciler {
     private final AidAiBusinessModelBindingMapper bindings;
     private final AidAiModelCapabilityMapper capabilities;
+    private final IAidAiModelFuncConfigService functions;
     private final IAidAiModelService models;
 
     /** 普通功能池编辑入口：保留既有绑定，新增模型按唯一能力或唯一默认能力自动选择。 */
@@ -46,6 +48,9 @@ public class ModelFunctionBindingReconciler {
         List<Long> ids = function.getModelIds() == null ? List.of() : JSON.parseArray(function.getModelIds(), Long.class);
         List<AidAiBusinessModelBinding> previous = bindings.selectList(Wrappers.<AidAiBusinessModelBinding>lambdaQuery()
                 .eq(AidAiBusinessModelBinding::getFuncCode, function.getFuncCode()));
+        AidAiModelFuncConfig persisted = function.getId() == null ? null : functions.getById(function.getId());
+        Set<Long> existingIds = persisted == null || persisted.getModelIds() == null
+                ? Collections.emptySet() : new LinkedHashSet<>(JSON.parseArray(persisted.getModelIds(), Long.class));
         List<AidAiBusinessModelBinding> selected = new ArrayList<>();
         for (Long id : ids) {
             List<ModelCapabilityDefinition> definitions = capabilities.selectList(Wrappers.<AidAiModelCapability>lambdaQuery()
@@ -63,7 +68,10 @@ public class ModelFunctionBindingReconciler {
             if (requested != null) {
                 rows = requestedRows(id, requested, candidates, function);
             } else {
-                rows = (function.getModelBindings() == null ? previous : function.getModelBindings()).stream()
+                // Only retained members may reuse their previous selection. An orphan row is never a new binding.
+                List<AidAiBusinessModelBinding> source = function.getModelBindings() == null
+                        ? (existingIds.contains(id) ? previous : List.of()) : function.getModelBindings();
+                rows = source.stream()
                         .filter(row -> Objects.equals(row.getModelId(), id)).toList();
                 if (rows.isEmpty() && function.getModelBindings() == null) {
                     List<ModelCapabilityDefinition> defaults = candidates.stream()
@@ -85,6 +93,13 @@ public class ModelFunctionBindingReconciler {
                 if (definition == null || !codes.add(row.getCapabilityCode())) {
                     fail("模型【" + modelLabel(id) + "】在模型池【" + poolLabel(function) + "】的能力不可用或重复");
                 }
+                boolean historicalSelection = existingIds.contains(id) && previous.stream().anyMatch(old ->
+                        Objects.equals(old.getModelId(), id)
+                                && Objects.equals(old.getCapabilityCode(), row.getCapabilityCode()));
+                if (StoryboardVideoPoolCapabilityPolicy.rejects(function.getFuncCode(), definition.getGenerateMode())
+                        && !historicalSelection) {
+                    fail("多参模型池不能绑定首尾帧能力，请使用首尾帧模型池");
+                }
                 if (row.getDefaultsJson() != null && !row.getDefaultsJson().isBlank())
                     ModelParameterValidator.validateBusinessDefaults(definition, JSON.parseObject(row.getDefaultsJson()));
                 AidAiBusinessModelBinding copy = new AidAiBusinessModelBinding();
@@ -95,6 +110,15 @@ public class ModelFunctionBindingReconciler {
         }
         bindings.delete(Wrappers.<AidAiBusinessModelBinding>lambdaQuery().eq(AidAiBusinessModelBinding::getFuncCode, function.getFuncCode()));
         selected.forEach(bindings::insert);
+    }
+
+    /** 移出模型池时也清理已有的孤立能力绑定，保证下次绑定从空关系开始。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void removeForModels(String funcCode, List<Long> modelIds) {
+        if (funcCode == null || modelIds == null || modelIds.isEmpty()) return;
+        bindings.delete(Wrappers.<AidAiBusinessModelBinding>lambdaQuery()
+                .eq(AidAiBusinessModelBinding::getFuncCode, funcCode)
+                .in(AidAiBusinessModelBinding::getModelId, modelIds));
     }
 
     private List<AidAiBusinessModelBinding> requestedRows(Long modelId, ModelPoolCapabilitySelection requested,
@@ -110,6 +134,10 @@ public class ModelFunctionBindingReconciler {
         }
         if (!allowed.containsAll(codes)) {
             fail("模型【" + modelLabel(modelId) + "】与模型池【" + poolLabel(function) + "】没有兼容能力");
+        }
+        if (candidates.stream().anyMatch(d -> codes.contains(d.getCode())
+                && StoryboardVideoPoolCapabilityPolicy.rejects(function.getFuncCode(), d.getGenerateMode()))) {
+            fail("多参模型池不能绑定首尾帧能力，请使用首尾帧模型池");
         }
         return codes.stream().map(code -> binding(modelId, code, Objects.equals(code, defaultCode))).toList();
     }

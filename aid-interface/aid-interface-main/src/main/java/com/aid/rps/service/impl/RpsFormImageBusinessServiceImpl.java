@@ -5,9 +5,15 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -44,6 +50,8 @@ import com.aid.common.aid.oss.config.OssConfigManager;
 import com.aid.common.aid.oss.core.OssTemplate;
 import com.aid.common.aid.oss.properties.OssProperties;
 import com.aid.common.aid.oss.util.MediaUrlResolver;
+import com.aid.common.config.AidAppConfig;
+import com.aid.common.constant.Constants;
 import com.aid.common.core.redis.RedisCache;
 import com.aid.common.error.TaskErrorPresentation;
 import com.aid.common.exception.ServiceException;
@@ -1932,10 +1940,12 @@ public class RpsFormImageBusinessServiceImpl implements IRpsFormImageBusinessSer
         }
 
         OssProperties ossProps = Objects.nonNull(ossConfigManager) ? ossConfigManager.getOssProperties() : null;
-        // 源图 DB 存相对路径，下载前先拼成完整可访问 URL
-        String sourceFullUrl = mediaUrlResolver.toFullUrl(sourceImage.getImageUrl());
-        // 下载源图字节（带 10MB 上限，超限或失败直接抛错回滚）
-        byte[] sourceBytes = downloadImageBytes(sourceFullUrl, MAX_SOURCE_IMAGE_BYTES, sourceImageId);
+        // 本地上传的 /profile 路径直接读取受管理的文件，避免依赖可选的资源访问域名。
+        Path localSource = resolveLocalSceneSourceFile(sourceImage.getImageUrl());
+        byte[] sourceBytes = localSource != null
+                ? readLocalImageBytes(localSource, MAX_SOURCE_IMAGE_BYTES, sourceImageId)
+                : downloadImageBytes(mediaUrlResolver.toFullUrl(sourceImage.getImageUrl()),
+                        MAX_SOURCE_IMAGE_BYTES, sourceImageId);
         // 解码 → 切 4 宫格 → 各自编码为 PNG 字节
         List<byte[]> quadrantBytes = cropQuadrants(sourceBytes, sourceImageId);
         // 逐张上传，返回剥离配置域名后的相对路径（顺序与 SPLIT_POSITION_LABELS 一致）
@@ -2076,13 +2086,91 @@ public class RpsFormImageBusinessServiceImpl implements IRpsFormImageBusinessSer
     }
 
     /**
-     * 下载源图字节，带大小上限保护。
+     * 读取已通过托管路径校验的本地源图，带大小上限保护。
      *
-     * @param fullUrl       源图完整可访问 URL
+     * @param file          已解析的本地文件
      * @param maxBytes      最大允许字节数
      * @param sourceImageId 源图 ID（仅日志用）
      * @return 源图字节数组
      */
+    private Path resolveLocalSceneSourceFile(String storedUrl)
+    {
+        if (!ossTemplate.isLocalFile(storedUrl))
+        {
+            return null;
+        }
+        try
+        {
+            URI uri = URI.create(storedUrl);
+            String path = uri.getPath();
+            String prefix = Constants.RESOURCE_PREFIX + "/upload/";
+            if (uri.getRawQuery() != null || uri.getRawFragment() != null
+                    || path == null || !path.startsWith(prefix)
+                    || path.contains("..") || path.contains("\\"))
+            {
+                throw new ServiceException("源图路径无效");
+            }
+            Path base = Paths.get(AidAppConfig.getProfile()).toRealPath();
+            Path file = base.resolve(path.substring(Constants.RESOURCE_PREFIX.length() + 1))
+                    .normalize().toRealPath();
+            if (!file.startsWith(base) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
+            {
+                throw new ServiceException("源图路径无效");
+            }
+            return file;
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (IOException | IllegalArgumentException e)
+        {
+            throw new ServiceException("源图读取失败");
+        }
+    }
+
+    private byte[] readLocalImageBytes(Path file, long maxBytes, Long sourceImageId)
+    {
+        try
+        {
+            if (Files.size(file) > maxBytes)
+            {
+                throw new ServiceException("源图过大");
+            }
+            try (InputStream in = Files.newInputStream(file);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream())
+            {
+                byte[] buffer = new byte[8192];
+                long total = 0;
+                int count;
+                while ((count = in.read(buffer)) != -1)
+                {
+                    total += count;
+                    if (total > maxBytes)
+                    {
+                        throw new ServiceException("源图过大");
+                    }
+                    out.write(buffer, 0, count);
+                }
+                if (total == 0)
+                {
+                    throw new ServiceException("源图无内容");
+                }
+                return out.toByteArray();
+            }
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (IOException e)
+        {
+            log.error("场景拆分失败：读取本地源图异常, sourceImageId={}, err={}", sourceImageId, e.getMessage(), e);
+            throw new ServiceException("源图读取失败");
+        }
+    }
+
+    /** 下载远程源图字节，带大小上限保护。 */
     private byte[] downloadImageBytes(String fullUrl, long maxBytes, Long sourceImageId)
     {
         if (StrUtil.isBlank(fullUrl))

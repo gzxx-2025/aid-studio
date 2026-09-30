@@ -5,6 +5,8 @@ import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.json.JSONUtil;
 import com.aid.common.exception.ServiceException;
+import com.aid.common.error.TaskErrorCode;
+import com.aid.common.error.TaskErrorResult;
 import com.aid.common.utils.ProviderEndpointUtils;
 import com.aid.domain.vo.AiModelConfigVo;
 import com.aid.media.constants.MinimaxH3Constants;
@@ -115,6 +117,18 @@ public class MinimaxH3VideoProviderClient implements VideoProviderClient {
 
     static ProviderTaskResult parseQueryResponse(int httpStatus, String raw, String providerTaskId,
                                                   String platformModelCode, String realModelCode) {
+        if (httpStatus == 404) {
+            log.warn("MiniMax H3 query endpoint returned 404, taskId={}", providerTaskId);
+            return ProviderTaskResult.builder()
+                .status(MinimaxH3Constants.STATUS_FAILURE)
+                .errorMessage("上游查询接口返回 404，任务无法继续查询")
+                .taskError(TaskErrorResult.of(TaskErrorCode.UPSTREAM_QUERY_NOT_FOUND))
+                .rawResponse(ProviderErrorSanitizer.fromHttp(httpStatus, raw))
+                .querySuccessful(Boolean.TRUE)
+                .providerStatus("HTTP_404")
+                .terminalConfirmed(Boolean.TRUE)
+                .build();
+        }
         if (httpStatus < 200 || httpStatus >= 300 || !JSONUtil.isTypeJSON(raw)) {
             log.warn("MiniMax H3 query HTTP/document anomaly, taskId={}, httpStatus={}, responseLength={}",
                 providerTaskId, httpStatus, StrUtil.length(raw));

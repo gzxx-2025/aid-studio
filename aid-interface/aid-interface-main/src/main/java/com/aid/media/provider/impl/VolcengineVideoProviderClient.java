@@ -9,6 +9,7 @@ import com.aid.common.exception.ServiceException;
 import com.aid.common.constant.HttpConstants;
 import com.aid.common.utils.ProviderEndpointUtils;
 import com.aid.domain.vo.AiModelConfigVo;
+import com.aid.media.constants.MediaInternalOptionKeys;
 import com.aid.media.constants.VolcengineConstants;
 import com.aid.media.dto.MediaVideoGenerateRequest;
 import com.aid.media.dto.ReferenceAudioInput;
@@ -593,7 +594,7 @@ public class VolcengineVideoProviderClient implements VideoProviderClient {
         validateCapabilityOption(modelConfig, "sizeOptions", resolution, "resolution unsupported");
         require(isAllowedResolution(modelConfig, resolution),
                 "分辨率无效", modelConfig);
-        if (SCENE_FIRST_FRAME.equals(scene) || SCENE_FIRST_LAST_FRAME.equals(scene)
+        if ((isSeedance25Model(modelConfig) && (SCENE_FIRST_FRAME.equals(scene) || SCENE_FIRST_LAST_FRAME.equals(scene)))
                 || SCENE_EDIT.equals(scene) || SCENE_EXTEND.equals(scene)) {
             require("adaptive".equalsIgnoreCase(ratio), "比例必须自适应", modelConfig);
         } else {
@@ -608,6 +609,12 @@ public class VolcengineVideoProviderClient implements VideoProviderClient {
         validateCapabilityOption(modelConfig, "aspectRatioOptions", ratio, "ratio unsupported");
         validateCapabilityOption(modelConfig, "durationOptions",
                 duration == null ? null : String.valueOf(duration), "duration unsupported");
+    }
+
+    private boolean isSeedance25Model(AiModelConfigVo modelConfig) {
+        String upstream = StringUtils.defaultIfBlank(modelConfig.getRealModelCode(), modelConfig.getModelCode());
+        return upstream != null && upstream.toLowerCase(java.util.Locale.ROOT)
+                .replace('.', '-').contains("seedance-2-5");
     }
 
     private boolean isSeedance25Ratio(String ratio) {
@@ -796,6 +803,11 @@ public class VolcengineVideoProviderClient implements VideoProviderClient {
             return;
         }
         for (String key : request.getOptions().keySet()) {
+            // 业务扇入、恢复和计费元数据只在站内消费，不属于厂商参数。
+            // 请求体仍由官方字段显式组装，未知的生成参数继续拒绝。
+            if (MediaInternalOptionKeys.isInternal(key)) {
+                continue;
+            }
             require(REQUEST_OPTION_KEYS.contains(key), "unsupported option: " + key, modelConfig);
         }
     }

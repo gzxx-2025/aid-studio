@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UserModelListItem } from '~/types/business-api'
-import { resolveImageGenParamsFromAgentDefaults } from './modelCapability'
+import { resolveImageGenParamsFromAgentDefaults, pickMatchedOption } from './modelCapability'
 
 const imageModel = {
   modelCode: 'image-model',
@@ -29,5 +29,15 @@ describe('resolveImageGenParamsFromAgentDefaults', () => {
         imageModel
       )
     ).toEqual({ resolution: '2k', aspectRatio: '1:1' })
+  })
+})
+
+describe('batch project aspect ratio capability selection', () => {
+  const ratios = ['adaptive', '16:9', '9:16', '4:3', '3:4', '1:1', '21:9']
+  it.each(['16:9', '9:16', '4:3', '3:4', '21:9'])('keeps project %s instead of adaptive model default', (ratio) => {
+    expect(pickMatchedOption(ratio, ratios, 'adaptive')).toBe(ratio)
+  })
+  it('honors a genuinely adaptive-only model', () => {
+    expect(pickMatchedOption('16:9', ['adaptive'], 'adaptive')).toBe('adaptive')
   })
 })

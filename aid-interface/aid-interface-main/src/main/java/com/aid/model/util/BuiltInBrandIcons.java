@@ -19,6 +19,8 @@ public final class BuiltInBrandIcons
             case "gemini", "openai", "minimax", "agnes", "kling", "tokendance" ->
                     "/brand-icons/" + providerCode.trim().toLowerCase(Locale.ROOT) + ".png";
             case "topaz" -> "/brand-icons/topaz.ico";
+            case "wavespeed" -> "/brand-icons/wavespeed.ico";
+            case "tencent_ci_media", "tencent_mps" -> "/brand-icons/tencent-cloud.ico";
             default -> null;
         };
     }

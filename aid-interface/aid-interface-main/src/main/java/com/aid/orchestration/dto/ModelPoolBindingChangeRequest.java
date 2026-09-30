@@ -16,7 +16,7 @@ public class ModelPoolBindingChangeRequest
     /** 待处理模型池主键。 */
     private List<Long> poolIds;
 
-    /** 新增关系的能力选择；旧客户端省略时由服务端按唯一能力或唯一默认能力安全选择。 */
+    /** 新增结构化模型关系时必须提交本次能力选择；无结构化能力的旧模型可省略。 */
     private List<ModelPoolCapabilitySelection> capabilitySelections;
 
     /** 移出文本模型时由管理员明确选择的池内替代模型，键为模型池 ID。 */

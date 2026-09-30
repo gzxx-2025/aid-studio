@@ -430,9 +430,10 @@ export default function UpgradeConfigPage() {
   }, []);
 
   useEffect(() => {
-    if (!useUpgradeStore.getState().status) {
-      loadStatus(false).catch(() => undefined);
-    }
+    // The shared store may still contain the snapshot from before navigation.
+    // Always read the updater's current task on entry so an in-flight upgrade
+    // restores its terminal, progress and log polling after returning here.
+    loadStatus(false).catch(() => undefined);
     loadSource();
     loadDeployment();
     loadAssetsStatus();
@@ -703,6 +704,10 @@ export default function UpgradeConfigPage() {
   };
 
   const handleStartUpgrade = () => {
+    if (loading) {
+      message.info('正在同步升级任务状态，请稍候');
+      return;
+    }
     if (taskBusy) {
       message.warning('已有升级任务正在执行，请等待完成');
       return;
@@ -1016,9 +1021,11 @@ export default function UpgradeConfigPage() {
             <Button
               type="primary"
               icon={<RocketOutlined />}
-              disabled={!updater?.ready || updater?.hasUpdate || taskBusy}
+              disabled={!updater?.ready || updater?.hasUpdate || taskBusy || loading}
               title={
-                taskBusy
+                loading
+                  ? '正在同步升级任务状态'
+                  : taskBusy
                   ? '已有任务正在执行'
                   : updater?.hasUpdate
                     ? '必须先升级升级器'

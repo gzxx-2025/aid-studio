@@ -22,7 +22,7 @@ public record SkillModelConfiguration(String defaultModelCode, List<String> sele
         if (version == null) {
             return new SkillModelConfiguration(null, List.of());
         }
-        String fallback = StrUtil.trim(version.getModelCode());
+        String fallback = canonicalCode(version.getModelCode());
         if (StrUtil.isBlank(version.getModelConfigJson())) {
             return legacy(fallback);
         }
@@ -40,11 +40,11 @@ public record SkillModelConfiguration(String defaultModelCode, List<String> sele
 
     public static SkillModelConfiguration normalized(String defaultCode, List<String> candidates,
                                                      boolean legacyFallback) {
-        String normalizedDefault = StrUtil.trim(defaultCode);
+        String normalizedDefault = canonicalCode(defaultCode);
         LinkedHashSet<String> ordered = new LinkedHashSet<>();
         if (candidates != null) {
             for (String candidate : candidates) {
-                String code = StrUtil.trim(candidate);
+                String code = canonicalCode(candidate);
                 if (StrUtil.isNotBlank(code)) {
                     ordered.add(code);
                 }
@@ -77,5 +77,12 @@ public record SkillModelConfiguration(String defaultModelCode, List<String> sele
         return StrUtil.isBlank(fallback)
                 ? new SkillModelConfiguration(null, List.of())
                 : new SkillModelConfiguration(fallback, List.of(fallback));
+    }
+
+    private static String canonicalCode(String code) {
+        String normalized = StrUtil.trim(code);
+        // Published Skill packages are immutable and their digest includes the saved model list.
+        // Resolve the retired upstream identity without rewriting signed package snapshots.
+        return "deepseek-v4-flash".equals(normalized) ? "deepseek-flash" : normalized;
     }
 }

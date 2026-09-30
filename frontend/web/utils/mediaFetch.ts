@@ -22,10 +22,12 @@ function buildMediaProxyUrl(remoteUrl: string): string {
 /**
  * 将跨域媒体地址转换为同源代理地址，供 video/audio 直接播放。
  * 预览与 Canvas 截帧必须使用相同地址，避免媒体可播放却无法读取画面的情况。
+ * 静态站的可信资源预览可显式 direct；需要读取像素时由调用方保证 CDN CORS。
  */
-export function resolveMediaPlaybackUrl(url: string): string {
+export function resolveMediaPlaybackUrl(url: string, options?: { direct?: boolean }): string {
   const remote = String(url || '').trim()
   if (
+    options?.direct ||
     !remote ||
     remote.startsWith('blob:') ||
     remote.startsWith('data:') ||

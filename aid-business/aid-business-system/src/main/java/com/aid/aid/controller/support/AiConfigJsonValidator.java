@@ -147,6 +147,7 @@ public final class AiConfigJsonValidator
             return;
         }
         model.setExtraBody(sanitizeRuntimeTextOptions(model.getExtraBody()));
+        model.setCapabilityJson(com.aid.aid.service.support.MediaCapabilityNormalizer.normalizeJson(model.getCapabilityJson()));
         validateJsonObjectIfPresent("billing_rule_json", model.getBillingRuleJson());
         validateJsonObjectIfPresent("schedule_strategy_json", model.getScheduleStrategyJson());
         validateJsonObjectIfPresent("capability_json", model.getCapabilityJson());
@@ -481,51 +482,63 @@ public final class AiConfigJsonValidator
         if (StrUtil.isBlank(raw)) return;
         try {
             JsonNode root = OBJECT_MAPPER.readTree(raw);
-            validateMediaCapabilityObject(root);
+            if (!root.isObject()) throw new IllegalArgumentException("根节点必须是对象");
+            validateMediaCapabilityObject(root, "capabilityJson");
             JsonNode scenes = root.path("sceneRules");
-            if (!scenes.isMissingNode() && !scenes.isObject()) throw new IllegalArgumentException("场景配置无效");
+            if (!scenes.isMissingNode() && !scenes.isNull() && !scenes.isObject()) throw new IllegalArgumentException("sceneRules 必须是对象");
             if (scenes.isObject()) {
-                var values = scenes.elements();
-                while (values.hasNext()) {
-                    JsonNode scene = values.next();
-                    if (!scene.isObject()) throw new IllegalArgumentException("场景配置无效");
-                    validateMediaCapabilityObject(scene);
+                var fields = scenes.fields();
+                while (fields.hasNext()) {
+                    var field = fields.next();
+                    JsonNode scene = field.getValue();
+                    String path = "sceneRules." + field.getKey();
+                    if (scene.isNull()) continue;
+                    if (!scene.isObject()) throw new IllegalArgumentException(path + " 必须是对象");
+                    validateMediaCapabilityObject(scene, path);
                 }
             }
+        } catch (IllegalArgumentException ex) {
+            log.info("媒体能力结构无效: {}", ex.getMessage());
+            throw new ServiceException("媒体能力配置无效：" + ex.getMessage());
         } catch (Exception ex) {
             log.info("媒体能力结构无效: {}", ex.getClass().getSimpleName());
-            throw new ServiceException("媒体能力配置无效");
+            throw new ServiceException("媒体能力配置无效：JSON格式错误");
         }
     }
 
-    private static void validateMediaCapabilityObject(JsonNode capability) {
+    private static void validateMediaCapabilityObject(JsonNode capability, String path) {
         for (String prefix : List.of("referenceImage", "referenceVideo", "referenceAudio")) {
             for (String suffix : List.of("MinDurationSeconds", "MaxDurationSeconds", "MaxTotalDurationSeconds", "MaxFileSizeMb",
                     "MinDimensionPixels", "MaxDimensionPixels", "MinPixels", "MaxPixels", "MinWidth", "MaxWidth",
                     "MinHeight", "MaxHeight", "MinAspectRatio", "MaxAspectRatio", "MinFps", "MaxFps")) {
-                JsonNode value = capability.get(prefix + suffix);
-                if (value != null && (!value.isNumber() || value.decimalValue().signum() < 0)) {
-                    throw new IllegalArgumentException("素材限制无效");
+                String field = prefix + suffix;
+                JsonNode value = capability.get(field);
+                // null 是配置合并协议的删除标记，编辑器留空/关闭输入能力时会显式发送。
+                if (value != null && !value.isNull() && (!value.isNumber() || value.decimalValue().signum() < 0)) {
+                    throw new IllegalArgumentException(path + "." + field + " 必须是非负数字");
                 }
             }
             for (String suffix : List.of("DurationSeconds", "DimensionPixels", "Pixels", "Width", "Height", "AspectRatio", "Fps")) {
                 JsonNode min = capability.get(prefix + "Min" + suffix);
                 JsonNode max = capability.get(prefix + "Max" + suffix);
-                if (min != null && max != null && max.decimalValue().signum() > 0
-                        && min.decimalValue().compareTo(max.decimalValue()) > 0) throw new IllegalArgumentException("素材区间无效");
+                if (min != null && !min.isNull() && max != null && !max.isNull() && max.decimalValue().signum() > 0
+                        && min.decimalValue().compareTo(max.decimalValue()) > 0)
+                    throw new IllegalArgumentException(path + "." + prefix + "Min" + suffix + " 不能大于最大值");
             }
             JsonNode formats = capability.get(prefix + "Formats");
-            if (formats != null) {
-                if (!formats.isArray()) throw new IllegalArgumentException("素材格式无效");
+            if (formats != null && !formats.isNull()) {
+                if (!formats.isArray()) throw new IllegalArgumentException(path + "." + prefix + "Formats 必须是数组");
                 for (JsonNode format : formats) {
                     if (!format.isTextual() || format.asText().isBlank()
-                            || "*".equals(format.asText()) && formats.size() != 1) throw new IllegalArgumentException("素材格式无效");
+                            || "*".equals(format.asText()) && formats.size() != 1)
+                        throw new IllegalArgumentException(path + "." + prefix + "Formats 包含无效格式");
                 }
             }
         }
         for (String field : List.of("maxInputMediaTotalFileSizeMb", "maxInputOutputVideoDurationSeconds")) {
             JsonNode value = capability.get(field);
-            if (value != null && (!value.isNumber() || value.decimalValue().signum() < 0)) throw new IllegalArgumentException("素材限制无效");
+            if (value != null && !value.isNull() && (!value.isNumber() || value.decimalValue().signum() < 0))
+                throw new IllegalArgumentException(path + "." + field + " 必须是非负数字");
         }
     }
 

@@ -252,7 +252,7 @@ function formatSizeLabel(code: string): string {
 }
 
 /** 从 listByFunc / model/list 单项解析生成配置下拉数据源 */
-export function parseModelCapability(item?: UserModelListItem | null, parameters?: Record<string, unknown>): ModelCapabilitySnapshot {
+export function parseModelCapability(item?: UserModelListItem | null, parameters?: Record<string, unknown>, allowAutomaticDuration = false): ModelCapabilitySnapshot {
   const cap = resolveCapabilityRecord(item)
   const aspectFromCap = resolveModelAspectRatioOptions(item)
   const sizeFromCap = resolveModelSizeOptions(item).map(normalizeSizeCode).filter(Boolean)
@@ -292,7 +292,7 @@ export function parseModelCapability(item?: UserModelListItem | null, parameters
   const durationFromCap = Array.isArray(cap.durationOptions)
     ? (cap.durationOptions as number[])
         .map((n) => Number(n))
-        .filter((n) => Number.isFinite(n) && n > 0)
+        .filter((n) => Number.isFinite(n) && (n > 0 || allowAutomaticDuration && n === -1))
     : []
   const durationOptions =
     durationFromCap.length > 0
@@ -303,7 +303,7 @@ export function parseModelCapability(item?: UserModelListItem | null, parameters
 
   const defaultDur = Number(cap.defaultDurationSeconds ?? item?.defaultDurationSeconds)
   const defaultDurationSeconds =
-    Number.isFinite(defaultDur) && defaultDur > 0 && durationOptions.includes(defaultDur)
+    Number.isFinite(defaultDur) && (defaultDur > 0 || allowAutomaticDuration && defaultDur === -1) && durationOptions.includes(defaultDur)
       ? Math.floor(defaultDur)
       : durationOptions[0] ?? 5
 
@@ -326,6 +326,8 @@ export function parseModelCapability(item?: UserModelListItem | null, parameters
   snapshot.aspectRatioOptions = allowedParameterOptions(snapshot.aspectRatioOptions, constraints.get('aspectRatio') ?? constraints.get('options.aspectRatio'))
   snapshot.sizeOptions = allowedParameterOptions(snapshot.sizeOptions, constraints.get('size') ?? constraints.get('options.size') ?? constraints.get('options.resolution'))
   snapshot.durationOptions = allowedParameterOptions(snapshot.durationOptions, constraints.get('durationSeconds'))
+  snapshot.supportsDuration = item?.supportsDuration !== false && snapshot.durationOptions.length > 0
+  if (!snapshot.durationOptions.includes(snapshot.defaultDurationSeconds)) snapshot.defaultDurationSeconds = snapshot.durationOptions[0] ?? 5
   const countConstraint = constraints.get('expectedImageCount')
   if (countConstraint) snapshot.countOptions = allowedParameterOptions(Array.from({ length: snapshot.maxOutputCount }, (_, index) => index + 1), countConstraint)
   const audioConstraint = constraints.get('audio')
@@ -391,7 +393,7 @@ export function buildDurationSelectOptions(
 ): SelectOption<string>[] {
   return snapshot.durationOptions.map((sec) => ({
     value: String(sec),
-    label: `${sec} s`
+    label: sec === -1 ? '自动' : `${sec} s`
   }))
 }
 

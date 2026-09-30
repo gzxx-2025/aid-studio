@@ -27,6 +27,8 @@ UserProjectUpdateRequest
 } from '~/types/business-api';
 import { request } from '~/utils/api';
 import {
+API_DEFAULT_PAGE_SIZE,
+extractPaginatedResponse,
 runListDedupe,
 stableRequestKey,
 unwrap,
@@ -170,14 +172,28 @@ export async function publicProjectDetail(id: number): Promise<PublicProjectDeta
   return task
 }
 
-/** 用户剧集：列表（/api/user/episode/list） */
+/** 用户剧集：分页列表；服务端从查询参数读取 pageNum/pageSize。 */
+export async function userEpisodePage(body: {
+  projectId: number
+  pageNum: number
+  pageSize: number
+}): Promise<{ total: number; rows: UserEpisodeRow[]; hasMore: boolean }> {
+  const { projectId, pageNum, pageSize } = body
+  const res = await request.post('/api/user/episode/list', { projectId }, {
+    params: { pageNum, pageSize }
+  })
+  const { total, rows, hasMore } = extractPaginatedResponse<UserEpisodeRow>(res, pageNum, pageSize)
+  return { total, rows, hasMore }
+}
+
+/** 旧调用需要完整剧集集合（选择剧集、项目配置校验等），逐页读取直到结束。 */
 export async function userEpisodeList(body: { projectId: number }): Promise<UserEpisodeRow[]> {
-  const res = (await request.post('/api/user/episode/list', body)) as {
-    data?: UserEpisodeRow[]
-    rows?: UserEpisodeRow[]
+  const rows: UserEpisodeRow[] = []
+  for (let pageNum = 1; ; pageNum += 1) {
+    const page = await userEpisodePage({ ...body, pageNum, pageSize: API_DEFAULT_PAGE_SIZE })
+    rows.push(...page.rows)
+    if (!page.hasMore || page.rows.length === 0) return rows
   }
-  const list = res.data ?? res.rows ?? []
-  return Array.isArray(list) ? list : []
 }
 
 /** 用户剧集：创建（/api/user/episode/create） */

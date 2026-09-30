@@ -297,6 +297,7 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
                 request.getBusinessFuncCode(), request.getCapabilityCode()), request.getCapabilityCode());
         // 区域编辑的真实原图尺寸必须先于模型参数默认值写回，避免默认 1024x1024 覆盖非 1024 原图。
         validateAndNormalizeProtectedImageEdit(request, modelConfig);
+        normalizeWholeImageEditSize(request, modelConfig);
         invocationResolver.normalize(modelConfig, request);
         validatePromptForModel(modelConfig, request.getPrompt());
         ModelCapabilityValidator.validatePrompt(modelConfig, request.getPrompt());
@@ -354,6 +355,7 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
             throw new ServiceException("请求不能为空");
         }
         AiModelConfigVo modelConfig = invocationResolver.select(resolveModel(request.getModelName(), MediaType.VIDEO), request.getCapabilityCode());
+        com.aid.media.provider.VideoProviderConfigurationValidator.validate(modelConfig);
         invocationResolver.normalize(modelConfig, request);
         validatePromptForModel(modelConfig, request.getPrompt());
         ModelCapabilityValidator.validatePrompt(modelConfig, request.getPrompt());
@@ -403,10 +405,11 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
             throw new ServiceException("请求不能为空");
         }
         AiModelConfigVo modelConfig = invocationResolver.select(resolveModel(request.getModelName(), MediaType.VIDEO), request.getCapabilityCode());
+        com.aid.media.provider.VideoProviderConfigurationValidator.validate(modelConfig);
         invocationResolver.normalizePlannedPrompt(modelConfig, request);
         VideoProviderClient videoClient = resolveVideoClient(request.getModelName(), modelConfig);
         resolveReferenceVideoRecords(request, videoClient.requiresVerifiedMetadataForQuote());
-        validateVideoProviderContract(modelConfig, request);
+        validateVideoProviderContract(modelConfig, request, true);
         ModelInputCapabilityValidator.validateRawVideoInputs(modelConfig, request);
         Wan3VideoRequestBuilder.validateRawInputs(modelConfig, request);
         AgnesVideo25RequestBuilder.validateRawInputs(modelConfig, request);
@@ -429,8 +432,7 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         ModelCapabilityValidator.normalizeAndValidateVideoAudio(modelConfig, request);
         ModelCapabilityValidator.normalizeAndValidateReferenceAudios(modelConfig, request);
         ModelInputCapabilityValidator.validateVideoQuote(modelConfig, request, true);
-        Wan3VideoRequestBuilder.validateFullRequest(modelConfig, request);
-        AgnesVideo25RequestBuilder.validateFullRequest(modelConfig, request);
+        validateVideoProviderContract(modelConfig, request, true);
         videoClient.validateRequest(modelConfig, request, true);
         BillingInput input = BillingInputExtractor.fromVideoRequest(request, modelConfig);
         input.setInputMetadataPending(true);
@@ -2137,8 +2139,19 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
             task.setStatus(MediaTaskStatus.SUCCEEDED.name());
             // base64 图片已在 provider 内部转 OSS，响应体不再入库，避免 aid_media_task.response_json 保留图片占位内容
             task.setResponseJson(null);
-            task.setOssUrl(submitResult.getOssUrl());
-            persistSubmitResultManifest(task, submitResult, true);
+            // Some synchronous image protocols upload base64 output before returning. Canvas edits
+            // still need the same geometry/protected-region post-processing as URL-based outputs.
+            // Keep the provider upload as the origin and let persistOssIfNeeded publish the final
+            // image; exposing it directly here bypasses that step and leaks the provider dimensions.
+            if (MediaType.IMAGE.name().equals(task.getMediaType())
+                    && protectedImageEditRequest(task) != null) {
+                task.setOriginUrl(submitResult.getOssUrl());
+                task.setOssUrl(null);
+                persistSubmitResultManifest(task, submitResult, false);
+            } else {
+                task.setOssUrl(submitResult.getOssUrl());
+                persistSubmitResultManifest(task, submitResult, true);
+            }
             task.setErrorMessage(null);
             // 同步 TTS 音频时长（毫秒→秒向上取整，宁高勿低）：留档到任务表，
             // 供业务侧回填 aid_audio_record.duration_ms、对口型时长校验与合成对齐消费。
@@ -2515,7 +2528,7 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
             || StringUtils.isBlank(task.getProviderTaskId())) {
             return;
         }
-        AiModelConfigVo modelConfig = resolveTaskModelConfig(task);
+        AiModelConfigVo modelConfig = taskConfigurationResolver.resolveForQuery(task);
         if (modelConfig == null) {
             if (failOnModelMissing) {
                 throw new ServiceException("模型配置不存在: " + task.getModelName());
@@ -3376,9 +3389,15 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
     /** 执行视频 Provider 契约校验。 */
     static void validateVideoProviderContract(AiModelConfigVo modelConfig,
                                                MediaVideoGenerateRequest request) {
+        validateVideoProviderContract(modelConfig, request, false);
+    }
+
+    /** 计划报价仅延后提示词必填检查，正式报价与提交仍采用完整契约。 */
+    static void validateVideoProviderContract(AiModelConfigVo modelConfig,
+                                               MediaVideoGenerateRequest request, boolean promptPending) {
         if (modelConfig != null
             && MinimaxH3Constants.PROTOCOL_VIDEO.equalsIgnoreCase(StrUtil.trim(modelConfig.getProtocol()))) {
-            MinimaxH3VideoRequestBuilder.buildSubmissionBodyForValidation(modelConfig, request);
+            MinimaxH3VideoRequestBuilder.buildSubmissionBodyForValidation(modelConfig, request, promptPending);
             return;
         }
         String internalAspectRatio = request == null ? null : request.getAspectRatio();
@@ -3390,12 +3409,12 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         try {
             if (modelConfig != null
                 && KlingConstants.PROVIDER_CODE.equalsIgnoreCase(StrUtil.trim(modelConfig.getProviderCode()))) {
-                KlingVideoRequestBuilder.validateFullRequest(modelConfig, request);
+                KlingVideoRequestBuilder.validateFullRequest(modelConfig, request, promptPending);
                 return;
             }
             if (modelConfig != null
                 && DmcH3VideoRequestBuilder.PROTOCOL.equalsIgnoreCase(StrUtil.trim(modelConfig.getProtocol()))) {
-                DmcH3VideoRequestBuilder.build(modelConfig, request, false);
+                DmcH3VideoRequestBuilder.build(modelConfig, request, promptPending);
                 return;
             }
             if (modelConfig != null
@@ -3410,11 +3429,11 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
                 return;
             }
             if (Wan3VideoRequestBuilder.supportsModel(modelConfig)) {
-                Wan3VideoRequestBuilder.validateFullRequest(modelConfig, request);
+                Wan3VideoRequestBuilder.validateFullRequest(modelConfig, request, promptPending);
                 return;
             }
             if (AgnesVideo25RequestBuilder.supportsModel(modelConfig)) {
-                AgnesVideo25RequestBuilder.validateFullRequest(modelConfig, request);
+                AgnesVideo25RequestBuilder.validateFullRequest(modelConfig, request, promptPending);
             }
         } finally {
             if (followInput) {
@@ -5054,10 +5073,68 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
 
     private static void applyProtectedOutputSize(MediaImageGenerateRequest request,
                                                    AiModelConfigVo modelConfig, String expected) {
-        if (modelConfig != null && modelConfig.getResolvedDefinition() != null
-                && ModelParameterValidator.parameterPaths(modelConfig.getResolvedDefinition()).contains("size")) {
-            request.setSize(expected);
+        if (modelConfig == null || modelConfig.getResolvedDefinition() == null
+                || !ModelParameterValidator.parameterPaths(modelConfig.getResolvedDefinition()).contains("size")) return;
+        // The canvas dimensions are not a model quality preset. Only pass exact pixels when
+        // the selected capability actually accepts them; otherwise keep its own preset.
+        JsonNode capability = ModelCapabilityResolver.parseCapability(modelConfig.getCapabilityJson());
+        var sizes = ModelCapabilityResolver.readImageSceneOptions(modelConfig,
+                "imageEdit", ModelCapabilityResolver.KEY_SIZE_OPTIONS);
+        if (!sizes.isEmpty()) {
+            if (sizes.stream().anyMatch(size -> expected.equalsIgnoreCase(size))) {
+                request.setSize(expected);
+            } else {
+                String[] dimensions = expected.split("x");
+                String closest = closestImageSize(Integer.parseInt(dimensions[0]),
+                        Integer.parseInt(dimensions[1]), sizes);
+                if (closest != null) request.setSize(closest);
+            }
+            return;
         }
+        var sizeField = modelConfig.getResolvedDefinition().getParameters().stream()
+                .filter(field -> "size".equals(field.getName())).findFirst().orElse(null);
+        if (sizeField != null && sizeField.getChoices() != null && !sizeField.getChoices().isEmpty()) {
+            if (sizeField.getChoices().stream().anyMatch(choice -> expected.equalsIgnoreCase(String.valueOf(choice))))
+                request.setSize(expected);
+            return;
+        }
+        if (capability != null && capability.path("allowCustomWH").asBoolean(false)) request.setSize(expected);
+    }
+
+    private static void normalizeWholeImageEditSize(MediaImageGenerateRequest request,
+                                                    AiModelConfigVo modelConfig) {
+        if (!isCanvasWholeImageEdit(request) || modelConfig == null) return;
+        String requested = request.getSize();
+        if (StringUtils.isNotBlank(requested)
+                && !requested.equalsIgnoreCase(StringUtils.defaultString(modelConfig.getDefaultSizeCode()))) return;
+        var source = com.aid.media.provider.ImageEditAssetSupport.dimensions(request.getReferenceImageUrl(), "原图");
+        String closest = closestImageSize(source.width(), source.height(),
+                ModelCapabilityResolver.readImageSceneOptions(modelConfig,
+                        "imageEdit", ModelCapabilityResolver.KEY_SIZE_OPTIONS));
+        if (closest != null) request.setSize(closest);
+    }
+
+    static String closestImageSize(int sourceWidth, int sourceHeight, java.util.List<String> sizes) {
+        if (sourceWidth <= 0 || sourceHeight <= 0 || sizes == null) return null;
+        double sourceRatio = sourceWidth / (double) sourceHeight;
+        double sourcePixels = (double) sourceWidth * sourceHeight;
+        String closest = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (String size : sizes) {
+            String normalized = normalizeImageDimensions(size);
+            if (normalized == null) continue;
+            String[] parts = normalized.split("x");
+            double width = Double.parseDouble(parts[0]);
+            double height = Double.parseDouble(parts[1]);
+            double ratioError = Math.abs(Math.log((width / height) / sourceRatio));
+            double areaError = Math.abs(Math.log((width * height) / sourcePixels));
+            double score = ratioError * 10D + areaError;
+            if (score < bestScore) {
+                bestScore = score;
+                closest = normalized;
+            }
+        }
+        return closest;
     }
 
     private static String normalizeImageDimensions(String value) {
@@ -5091,7 +5168,7 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         }
         MediaImageGenerateRequest request = JSONUtil.toBean(task.getRequestJson(), MediaImageGenerateRequest.class);
         if (!com.aid.media.provider.ImageEditAssetSupport.requiresResultProtection(request)
-                && !isLayerDecomposition(request)) {
+                && !isLayerDecomposition(request) && !isCanvasWholeImageEdit(request)) {
             return null;
         }
         if (!isLayerDecomposition(request)) modelResourceUrlSigner.sign(request);
@@ -5100,6 +5177,13 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
 
     private static boolean isLayerDecomposition(MediaImageGenerateRequest request) {
         return request != null && "image_layer_decomposition".equals(request.getCapabilityCode());
+    }
+
+    private static boolean isCanvasWholeImageEdit(MediaImageGenerateRequest request) {
+        return request != null && "image_edit".equals(request.getCapabilityCode())
+                && Set.of("canvas.image.relight", "canvas.image.multi_view", "canvas.image.touch_edit",
+                        "canvas.image.emotion", "canvas.image.portrait_texture", "canvas.image.style_apply")
+                .contains(request.getBusinessFuncCode());
     }
 
     private static final class LayerOutputInvalidException extends RuntimeException {
@@ -5197,13 +5281,17 @@ public class MediaGenerationServiceImpl implements IMediaGenerationService, Medi
         if (results.isEmpty()) throw new ServiceException("图片编辑结果清单缺失");
 
         boolean layerDecomposition = isLayerDecomposition(request);
-        com.aid.media.provider.ImageEditAssetSupport.PreparedProtection protection = layerDecomposition
+        boolean wholeImageEdit = isCanvasWholeImageEdit(request);
+        com.aid.media.provider.ImageEditAssetSupport.PreparedProtection protection = layerDecomposition || wholeImageEdit
                 ? null : com.aid.media.provider.ImageEditAssetSupport.prepareResultProtection(request);
+        java.awt.image.BufferedImage sourceImage = wholeImageEdit
+                ? com.aid.media.provider.ImageEditAssetSupport.read(request.getReferenceImageUrl(), "原图").image() : null;
         for (AidMediaResult result : results) {
             if (StringUtils.isNotBlank(result.getOssUrl())) continue;
             if (StringUtils.isBlank(result.getOriginUrl())) throw new ServiceException("图片编辑结果地址缺失");
             byte[] generated = downloadOriginBytesWithRetry(task, result.getOriginUrl());
             byte[] protectedBytes = layerDecomposition ? generated
+                    : wholeImageEdit ? com.aid.media.provider.ImageEditAssetSupport.fitWholeImageResult(sourceImage, generated)
                     : com.aid.media.provider.ImageEditAssetSupport.protectResult(protection, generated);
             if (layerDecomposition) {
                 validateLayerImageBytes(result, generated);

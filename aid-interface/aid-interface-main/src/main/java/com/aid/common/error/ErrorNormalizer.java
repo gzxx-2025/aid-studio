@@ -169,6 +169,7 @@ public class ErrorNormalizer {
         String effectiveProviderCode = StrUtil.blankToDefault(
                 providerCode, errorProviderResolver.resolve(modelCode));
         TaskErrorResult fallbackResult = classifyFallback(httpStatus, rawMessage);
+        TaskErrorResult contractResult = ProviderErrorContract.classify(rawMessage);
         List<AidProviderErrorRule> rules = errorRuleCache.findEffective(effectiveProviderCode, modelCode);
         for (AidProviderErrorRule rule : rules) {
             if (errorRuleEngine.matches(rule, httpStatus, rawMessage)) {
@@ -176,6 +177,9 @@ public class ErrorNormalizer {
                 if (Objects.isNull(code)) {
                     log.warn("[ErrorNormalizer] 规则错误码无效, ruleId={}, errorCode={}",
                             rule.getId(), rule.getErrorCode());
+                    continue;
+                }
+                if (contractResult != null && !code.name().equals(contractResult.getErrorCode())) {
                     continue;
                 }
                 TaskErrorResult result = TaskErrorResult.of(code, rawMessage);
@@ -212,7 +216,9 @@ public class ErrorNormalizer {
      * 只放跨厂商、语义明确的样本，厂商差异仍由 aid_provider_error_rule 管理。
      */
     static TaskErrorResult classifyFallback(String rawMessage) {
-        String lower = StrUtil.nullToEmpty(rawMessage).toLowerCase(Locale.ROOT);
+        TaskErrorResult contract = ProviderErrorContract.classify(rawMessage);
+        if (contract != null) return contract;
+        String lower = StrUtil.nullToEmpty(ProviderErrorContract.errorText(rawMessage)).toLowerCase(Locale.ROOT);
         String structuredCode = structuredErrorCode(rawMessage);
         if ("arrearage".equalsIgnoreCase(structuredCode)) {
             return TaskErrorResult.of(TaskErrorCode.MERCHANT_QUOTA_EXHAUSTED, rawMessage);
@@ -240,7 +246,7 @@ public class ErrorNormalizer {
         if (containsAny(lower, "提示词为空", "输入内容为空", "文本不能为空", "prompt is required", "empty prompt")) {
             return TaskErrorResult.of(TaskErrorCode.USER_INPUT_EMPTY, rawMessage);
         }
-        if (containsAny(lower, "inputimagesensit", "contain real person", "contains real person",
+        if (containsAny(lower, "contain real person", "contains real person",
                 "may contain real person", "参考图可能包含真人")) {
             return TaskErrorResult.of(TaskErrorCode.REAL_PERSON_RESTRICTED, rawMessage);
         }
@@ -268,7 +274,8 @@ public class ErrorNormalizer {
             return TaskErrorResult.of(TaskErrorCode.PROVIDER_BUSY, rawMessage);
         }
         if (containsAny(lower, "content_policy_violation", "unable to generate this content",
-                "blocked by safety", "blocked by the content safety policy", "sensitive content", "captcha",
+                "blocked by safety", "blocked by the content safety policy",
+                "violates the content safety policy", "sensitive content", "captcha",
                 "内容未通过审核", "内容未通过安全校验", "内容不合规", "内容违规", "内容审核未通过",
                 "验证码图片")) {
             return TaskErrorResult.of(TaskErrorCode.UPSTREAM_CONTENT_FILTERED, rawMessage);
@@ -362,7 +369,7 @@ public class ErrorNormalizer {
         }
         if (containsAny(lower, "comfyui is not reachable", "image generation is not enabled",
                 "model service is not open", "requested resource not granted",
-                "resource not granted")) {
+                "resource not granted", "model unavailable", "model is offline")) {
             return TaskErrorResult.of(TaskErrorCode.UPSTREAM_SERVICE_NOT_OPEN, rawMessage);
         }
         if (containsAny(lower, "error updating database", "error querying database",

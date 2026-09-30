@@ -76,6 +76,7 @@ public class AgnesVideoProviderClient implements VideoProviderClient {
     }
     @Override
     public ProviderSubmitResult submit(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request) {
+        com.aid.media.provider.VideoProviderConfigurationValidator.validate(modelConfig);
         String apiKey = modelConfig != null ? modelConfig.getApiKey() : null;
         if (StringUtils.isBlank(apiKey)) {
             log.error("Agnes 视频提交失败: apiKey 为空, modelCode={}",

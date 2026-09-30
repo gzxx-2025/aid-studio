@@ -1,2 +1,91 @@
 @import './BatchGenerateStoryboardModal-base.css';
 @import './BatchGenerateStoryboardModal-bgsm-card-name.css';
+
+/* Keep the quote beside the action buttons; details must not stretch the footer. */
+.batch-generate-storyboard-wrap .bgsm-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+.batch-generate-storyboard-wrap .bgsm-footer-left--video {
+  flex-wrap: wrap;
+  gap: 12px 10px;
+}
+.batch-generate-storyboard-wrap .bgsm-field--video-param {
+  width: 96px;
+  flex: 0 0 96px;
+}
+.batch-generate-storyboard-wrap .bgsm-video-ratio {
+  width: 84px;
+  flex: 0 0 84px;
+}
+.batch-generate-storyboard-wrap .bgsm-field--video-audio {
+  width: 120px;
+  flex: 0 0 120px;
+}
+.batch-generate-storyboard-wrap .bgsm-readonly {
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  border: 1px solid rgba(78, 94, 122, 0.42);
+  border-radius: 8px;
+  background: #0a0d12;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.batch-generate-storyboard-wrap .bgsm-fee-value {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  max-width: 160px;
+  min-width: 0;
+}
+.batch-generate-storyboard-wrap .bgsm-fee-value .billing-quote-hint {
+  width: 100%;
+  overflow: hidden;
+}
+.batch-generate-storyboard-wrap .bgsm-fee-value .billing-quote-hint > span:not(.billing-quote-hint__dot) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.batch-generate-storyboard-wrap .bgsm-fee-value .billing-quote-hint__sku {
+  display: none;
+}
+.batch-generate-storyboard-wrap .bgsm-ratio-info {
+  margin-left: auto;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: #ffc069;
+  cursor: pointer;
+  display: inline-flex;
+}
+.batch-generate-storyboard-wrap .bgsm-readonly:focus-visible,
+.batch-generate-storyboard-wrap .bgsm-fee-value:focus-visible,
+.batch-generate-storyboard-wrap .bgsm-ratio-info:focus-visible {
+  outline: 2px solid #4ae7fd;
+  outline-offset: 2px;
+}
+.batch-generate-storyboard-wrap .bgsm-field--video-model .selected-model {
+  gap: 8px;
+}
+.batch-generate-storyboard-wrap .bgsm-field--video-model .model-name-row {
+  width: 100%;
+}
+.batch-generate-storyboard-wrap .bgsm-field--video-model .expand-icon {
+  margin-left: 0;
+}
+@media (max-width: 800px) {
+  .batch-generate-storyboard-wrap .bgsm-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .batch-generate-storyboard-wrap .bgsm-actions {
+    justify-self: end;
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Modal, Select, Tooltip, message } from 'antd'
-import { CloseOutlined } from '@ant-design/icons'
+import { CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { assetUrl } from '~/utils/assetUrl'
 import dialogSelectNorIconRaw from '~/assets/img/icon/dialog-select-nor.svg'
 import dialogSelectSelIconRaw from '~/assets/img/icon/dialog-select-sel.svg'
@@ -11,6 +11,7 @@ import { emptyImageIconUrl as emptyImageIconRaw } from '~/utils/emptyImageIcon'
 import { ShimmerImage } from '~/components/common/ShimmerImage'
 import { ShimmerVideo } from '~/components/common/ShimmerVideo'
 import { BillingQuoteHint } from '~/components/common/BillingQuoteHint'
+import { billingQuoteTextForDisplay } from '~/utils/billingQuoteDisplay'
 import { useBillingQuote } from '~/hooks/useBillingQuote'
 import ModelSelectDropdown from './ModelSelectDropdown'
 import { resolveStoryboardPanelCoverImage } from '~/utils/storyboardImageCover'
@@ -55,6 +56,7 @@ interface Props {
     agent?: string
     model?: string
     videoModel?: string
+    aspectRatio?: string
     resolution?: string
     durationSeconds?: number
     /** 音画同出偏好；模型不支持时固定为 none */
@@ -154,9 +156,6 @@ export function BatchGenerateStoryboardModal({
   )
   const currentProjectId = useCreationStore((state) => state.currentProjectId)
   const currentEpisodeId = useCreationStore((state) => state.currentEpisodeId)
-  const storedVideoAspectRatio = useCreationStore(
-    (state) => state.storyboardVideoGenerateSettings.aspectRatio
-  )
 
   const modalOpenInitGenRef = useRef(0)
   const [listLoading, setListLoading] = useState(false)
@@ -201,21 +200,19 @@ export function BatchGenerateStoryboardModal({
     loadImageAgents,
     initImageModelSelection,
     videoModel,
+    videoAspectRatio,
+    projectAspectRatio,
     videoModelOptions,
     videoModelsLoading,
     videoModelDropdownExpanded,
     setVideoModelDropdownExpanded,
     videoQuality,
     setVideoQuality,
-    videoDuration,
-    setVideoDuration,
     videoAudio,
     setVideoAudio,
     videoQualityOptions,
-    videoDurationOptions,
     videoAudioOptions,
     videoConfigShowAudio,
-    videoConfigShowDuration,
     selectedVideoModel,
     handleSelectVideoModel,
     initVideoModelSelection,
@@ -355,20 +352,16 @@ export function BatchGenerateStoryboardModal({
     }
     const modelCode = String(videoModel || '').trim()
     if (!modelCode) return null
-    const durationSeconds = Number(videoDuration)
     return {
       quoteType: 'STORYBOARD_VIDEO_WITH_PROMPT',
       payload: {
         ...basePayload,
         genModelName: modelCode,
-        ...(String(storedVideoAspectRatio || '').trim()
-          ? { genAspectRatio: String(storedVideoAspectRatio).trim() }
+        ...(String(videoAspectRatio || '').trim()
+          ? { genAspectRatio: String(videoAspectRatio).trim() }
           : {}),
         ...(formatVideoResolutionForApi(videoQuality)
           ? { genResolution: formatVideoResolutionForApi(videoQuality) }
-          : {}),
-        ...(videoConfigShowDuration && Number.isFinite(durationSeconds) && durationSeconds > 0
-          ? { genDurationSeconds: durationSeconds }
           : {}),
         genGenerateAudio: videoConfigShowAudio && videoAudio === 'with_audio'
       }
@@ -383,11 +376,9 @@ export function BatchGenerateStoryboardModal({
     model,
     open,
     selectedStoryboardIds,
-    storedVideoAspectRatio,
+    videoAspectRatio,
     videoAudio,
     videoConfigShowAudio,
-    videoConfigShowDuration,
-    videoDuration,
     videoModel,
     videoQuality,
     withImageCount
@@ -509,7 +500,6 @@ export function BatchGenerateStoryboardModal({
       message.warning('请选择生视频模型')
       return
     }
-    const durationSec = Number(videoDuration)
     const soundEffects: 'none' | 'with-sound' = videoConfigShowAudio
       ? videoAudio === 'with_audio'
         ? 'with-sound'
@@ -528,11 +518,9 @@ export function BatchGenerateStoryboardModal({
             ? { agent, model }
             : {
                 videoModel,
+                aspectRatio: String(videoAspectRatio || '').trim() || undefined,
                 resolution: String(videoQuality || '').trim().toLowerCase() || undefined,
-                soundEffects,
-                ...(videoConfigShowDuration && Number.isFinite(durationSec) && durationSec > 0
-                  ? { durationSeconds: durationSec }
-                  : {})
+                soundEffects
               })
       })
       onOpenChange(false)
@@ -599,6 +587,12 @@ export function BatchGenerateStoryboardModal({
       )}
     </>
   )
+
+  const ratioExplanation = videoModel && projectAspectRatio !== videoAspectRatio
+    ? `项目比例 ${projectAspectRatio} 不受此模型支持，实际使用 ${videoAspectRatio === 'adaptive' ? '自适应' : videoAspectRatio}。${videoAspectRatio === 'adaptive' ? '输出比例跟随首帧图片或输入视频。' : ''}`
+    : videoAspectRatio === 'adaptive' ? '输出比例跟随首帧图片或输入视频。' : ''
+  const quoteExplanation = [billingQuoteTextForDisplay(generationQuote.quote), generationQuote.quote?.skuName]
+    .filter(Boolean).join(' · ') || generationQuote.error || (generationQuote.loading ? '正在获取预计费用…' : '请选择分镜以预估费用')
 
   return (
     <Modal
@@ -720,6 +714,19 @@ export function BatchGenerateStoryboardModal({
                     <div className="bgsm-video-model-placeholder">暂无可用模型</div>
                   )}
                 </div>
+                <div className="bgsm-field bgsm-field--video-param bgsm-video-ratio">
+                  <label className="bgsm-label">画面比例</label>
+                  <div className="bgsm-readonly bgsm-ratio-value">
+                    <span role="status" aria-live="polite" aria-atomic="true">{videoAspectRatio === 'adaptive' ? '自适应' : videoAspectRatio}</span>
+                    {ratioExplanation ? (
+                      <Tooltip title={ratioExplanation} trigger={['hover', 'focus', 'click']}>
+                        <button type="button" className="bgsm-ratio-info" aria-label={ratioExplanation}>
+                          <InfoCircleOutlined aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </div>
                 {videoQualityOptions.length ? (
                   <div className="bgsm-field bgsm-field--video-param">
                     <label className="bgsm-label">清晰度</label>
@@ -734,22 +741,8 @@ export function BatchGenerateStoryboardModal({
                     />
                   </div>
                 ) : null}
-                {videoConfigShowDuration && videoDurationOptions.length ? (
-                  <div className="bgsm-field bgsm-field--video-param">
-                    <label className="bgsm-label">时长</label>
-                    <Select
-                      value={videoDuration}
-                      onChange={(v) => setVideoDuration(String(v))}
-                      className="bgsm-select"
-                      {...selectPopupProps}
-                      size="large"
-                      options={videoDurationOptions}
-                      disabled={!videoDurationOptions.length}
-                    />
-                  </div>
-                ) : null}
                 {videoConfigShowAudio && videoAudioOptions.length ? (
-                  <div className="bgsm-field bgsm-field--video-param">
+                  <div className="bgsm-field bgsm-field--video-param bgsm-field--video-audio">
                     <label className="bgsm-label">音频</label>
                     <Select
                       value={videoAudio}
@@ -766,12 +759,26 @@ export function BatchGenerateStoryboardModal({
             ) : null}
           </div>
           <div className="bgsm-actions">
-            <BillingQuoteHint
-              quote={generationQuote.quote}
-              loading={generationQuote.loading}
-              error={generationQuote.error}
-              active={Boolean(quoteRequest)}
-            />
+            {action === 'generate' && mode === 'video' ? (
+              <Tooltip title={quoteExplanation} trigger={['hover', 'focus', 'click']}>
+                <div className="bgsm-fee-value" tabIndex={0} aria-label={`预计费用：${quoteExplanation}`}>
+                  <BillingQuoteHint
+                    quote={generationQuote.quote}
+                    loading={generationQuote.loading}
+                    error={generationQuote.error}
+                    idleText="选择分镜后显示"
+                    active
+                  />
+                </div>
+              </Tooltip>
+            ) : (
+              <BillingQuoteHint
+                quote={generationQuote.quote}
+                loading={generationQuote.loading}
+                error={generationQuote.error}
+                active={Boolean(quoteRequest)}
+              />
+            )}
             <Button className="bgsm-btn-cancel" disabled={confirmLoading} onClick={handleCancel}>
               <div className="text-gradient">取消</div>
             </Button>

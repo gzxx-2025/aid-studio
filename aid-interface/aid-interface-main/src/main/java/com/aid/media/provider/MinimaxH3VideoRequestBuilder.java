@@ -36,21 +36,28 @@ public final class MinimaxH3VideoRequestBuilder {
 
     public static Map<String, Object> buildSubmissionBody(AiModelConfigVo config,
                                                            MediaVideoGenerateRequest request) {
-        return buildSubmissionBody(config, request, request == null ? null : request.getPrompt());
+        return buildSubmissionBody(config, request, request == null ? null : request.getPrompt(), false);
     }
 
     /** 使用清洗后的上游 prompt 完整预校验请求体，但不改写业务请求与审计快照。 */
     public static Map<String, Object> buildSubmissionBodyForValidation(AiModelConfigVo config,
                                                                         MediaVideoGenerateRequest request) {
+        return buildSubmissionBodyForValidation(config, request, false);
+    }
+
+    /** 计划报价延后未知提示词的必填校验，保持场景与媒体参数校验。 */
+    public static Map<String, Object> buildSubmissionBodyForValidation(AiModelConfigVo config,
+                                                                        MediaVideoGenerateRequest request,
+                                                                        boolean promptPending) {
         if (config == null || request == null) {
             return buildSubmissionBody(config, request);
         }
-        return buildSubmissionBody(config, request, sanitizedPrompt(config, request));
+        return buildSubmissionBody(config, request, sanitizedPrompt(config, request), promptPending);
     }
 
     private static Map<String, Object> buildSubmissionBody(AiModelConfigVo config,
                                                             MediaVideoGenerateRequest request,
-                                                            String submissionPrompt) {
+                                                            String submissionPrompt, boolean promptPending) {
         if (config == null || request == null) {
             throw rejected("missing model config or video request", "视频参数不能为空");
         }
@@ -61,15 +68,17 @@ public final class MinimaxH3VideoRequestBuilder {
         }
         Scene scene = requireScene(config);
         String prompt = StrUtil.trim(submissionPrompt);
-        if (StrUtil.isBlank(prompt)) {
+        if (!promptPending && StrUtil.isBlank(prompt)) {
             throw rejected("blank prompt", "视频提示词不能为空");
         }
-        if (prompt.length() > 7000) {
+        if (StrUtil.length(prompt) > 7000) {
             throw rejected("prompt exceeds 7000 characters, length=" + prompt.length(), "视频提示词过长");
         }
 
         List<Map<String, Object>> content = new ArrayList<>();
-        content.add(textItem(prompt));
+        if (StrUtil.isNotBlank(prompt)) {
+            content.add(textItem(prompt));
+        }
         switch (scene) {
             case TEXT -> validateTextScene(request);
             case FIRST_FRAME -> addFirstFrame(config, request, content);

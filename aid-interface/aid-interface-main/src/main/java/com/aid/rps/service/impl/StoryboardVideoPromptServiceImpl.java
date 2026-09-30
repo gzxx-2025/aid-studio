@@ -185,6 +185,14 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
      */
     private static final String FAILURE_BATCH_CONTRACT = "模型返回异常";
     private static final String FAILURE_OUTPUT_FORMAT = "输出格式异常";
+    private static final String FAILURE_IDENTITY_CONFLICT = "镜头编号冲突";
+    private static final String FAILURE_SCENE_CONFLICT = "场景约束冲突";
+    private static final String FAILURE_PROVIDER_REJECTED = "模型拒绝输出";
+
+    private static final Pattern VIDEO_SHOT_BEAT_PATTERN = Pattern.compile(
+            "(?:^|\\s)(\\d+(?:\\.\\d+)?\\s*[-~～至]\\s*\\d+(?:\\.\\d+)?\\s*秒[：:])");
+    private static final Pattern VIDEO_SHOT_FACT_PATTERN = Pattern.compile(
+            "(?:^|[；;])\\s*(景别|动作|台词|画面文字)[：:]\\s*([^；;]*)");
 
     /** 逐镜失败明细：缺少建议时长属输出契约缺字段，任务级仍按输出格式异常上报。 */
     private static final String FAILURE_DURATION_MISSING = "缺少视频时长";
@@ -605,6 +613,21 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
         return billingQuoteAssembler.aggregate(quoteTypeForMediaRoute(route), quotes);
     }
 
+    /** 与前端合并报价共用规格和素材规划，直接调用合并生成也不能绕过检查。 */
+    void preflightVideoChain(String direction, Map<String, Object> chainNext,
+            List<Long> targetIds, Long userId)
+    {
+        if (chainNext == null || chainNext.isEmpty()) return;
+        StoryboardVideoWithPromptRequest source = new StoryboardVideoWithPromptRequest();
+        source.setGenModelName(Convert.toStr(chainNext.get("modelName"), null));
+        source.setGenAspectRatio(Convert.toStr(chainNext.get("aspectRatio"), null));
+        source.setGenResolution(Convert.toStr(chainNext.get("resolution"), null));
+        if (chainNext.get("durationSeconds") instanceof Number n) source.setGenDurationSeconds(n.intValue());
+        if (chainNext.get("generateAudio") instanceof Boolean b) source.setGenGenerateAudio(b);
+        quotePlannedVideoBatches(new AutoVideoRoute(direction, Convert.toStr(chainNext.get("type"), null)),
+                source, targetIds, userId);
+    }
+
     private void copyPlannedVideoOptions(StoryboardVideoWithPromptRequest source,
             StoryboardVideoFromImageGenerateRequest target, List<Long> ids)
     {
@@ -744,6 +767,9 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             }
             throw new ServiceException("视频提示词已生成");
         }
+        // 已有任务重连走上面的只读分支；新链路必须在余额预检、占位、冻结和付费文本调用前检查出片。
+        preflightVideoChain(direction, chainNext,
+                plan.targetList().stream().map(AidStoryboard::getId).toList(), userId);
         agentCode = plan.agentCode();
         String resolvedModelCode = plan.modelCode();
         List<AidStoryboard> targetList = plan.targetList();
@@ -1407,6 +1433,7 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             realUsage = aggregateActualTokenUsage(llmMediaTaskId);
 
             // 解析 JSON 数组后按分镜身份键做完整双射校验；任何契约违约都整批拒绝，禁止部分写回。
+            String providerRejectionMessage = providerRejectionMessage(llmRaw);
             List<JsonNode> elems = parseLlmOutputArray(llmRaw);
             StoryboardPromptBatchAligner.AlignmentResult alignment =
                     alignLlmElementsToShots(elems, targetList, unitLabel);
@@ -1418,7 +1445,7 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
                         taskId, alignment.reason(), targetList.size(), elems.size(), StrUtil.length(llmRaw));
                 if (StrUtil.isBlank(firstFailureMessage))
                 {
-                    firstFailureMessage = FAILURE_BATCH_CONTRACT;
+                    firstFailureMessage = StrUtil.blankToDefault(providerRejectionMessage, FAILURE_BATCH_CONTRACT);
                 }
             }
             List<VideoPromptWrite> promptWrites = new ArrayList<>();
@@ -1435,7 +1462,8 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
                     {
                         firstFailureMessage = FAILURE_OUTPUT_FORMAT;
                     }
-                    failedItems.add(Map.of("storyboardId", sb.getId(), "errorMessage", FAILURE_OUTPUT_FORMAT));
+                    failedItems.add(Map.of("storyboardId", sb.getId(), "errorMessage",
+                            StrUtil.blankToDefault(providerRejectionMessage, FAILURE_OUTPUT_FORMAT)));
                     continue;
                 }
                 prompt = sanitizeVideoPromptReferences(prompt, referenceAssetNames, taskId, sb.getId());
@@ -1558,6 +1586,12 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
         if (failCount == total && total > 0)
         {
             log.error("视频提示词全部生成失败: taskId={}, error={}", taskId, firstFailureMessage);
+            if (FAILURE_IDENTITY_CONFLICT.equals(firstFailureMessage)
+                    || FAILURE_SCENE_CONFLICT.equals(firstFailureMessage)
+                    || FAILURE_PROVIDER_REJECTED.equals(firstFailureMessage))
+            {
+                throw TaskErrorPresentation.fromCode(TaskErrorCode.RESULT_FORMAT_INVALID, firstFailureMessage);
+            }
             throw TaskErrorPresentation.toServiceException(firstFailureMessage, "视频提示词失败");
         }
 
@@ -2689,7 +2723,14 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             sanitizeReferenceInfoInPlace(group, referenceAssetNames, referenceAudioNames, sb.getId());
             out.append("--- ").append(UNIT_LABEL_GROUP).append(' ')
                     .append(StoryboardPromptBatchAligner.buildShotKey(sb.getId())).append(" ---\n");
-            appendSceneContext(out, sceneContext);
+            if (includeImagePrompt)
+            {
+                appendSceneContext(out, sceneContext);
+            }
+            else
+            {
+                appendVideoSceneContext(out, sceneContext);
+            }
             appendShotField(out, group, FIELD_BIZ_NO_GROUP);
             appendShotField(out, group, "剧本内容");
             appendShotField(out, group, "画面说明");
@@ -2699,7 +2740,16 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             appendShotField(out, group, "镜头模式");
             appendShotField(out, group, "运镜等级");
             appendShotField(out, group, "时长估算");
-            appendShotField(out, group, "镜头脚本");
+            if (includeImagePrompt)
+            {
+                appendShotField(out, group, "镜头脚本");
+            }
+            else
+            {
+                // 多参视频只需要动作顺序；上游分镜图的机位、方位、焦距和距离是生图指令。
+                out.append("镜头脚本：").append(summarizeVideoShotScript(
+                        Convert.toStr(group.get("镜头脚本"), ""))).append('\n');
+            }
             if (includeImagePrompt)
             {
                 // 宫格图提示词（宫格画师产出的多宫格图 prompt），宫格视觉导演据此对齐"参考分镜图N"
@@ -2708,6 +2758,48 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             out.append('\n');
         }
         return out.toString();
+    }
+
+    static String summarizeVideoShotScript(String raw)
+    {
+        if (StrUtil.isBlank(raw))
+        {
+            return "";
+        }
+        Matcher beatMatcher = VIDEO_SHOT_BEAT_PATTERN.matcher(raw);
+        List<Integer> starts = new ArrayList<>();
+        List<Integer> ends = new ArrayList<>();
+        while (beatMatcher.find())
+        {
+            starts.add(beatMatcher.start());
+            ends.add(beatMatcher.end());
+        }
+        StringBuilder facts = new StringBuilder();
+        int beatCount = starts.isEmpty() ? 1 : starts.size();
+        for (int i = 0; i < beatCount; i++)
+        {
+            String beat = starts.isEmpty() ? raw : raw.substring(ends.get(i),
+                    i + 1 < beatCount ? starts.get(i + 1) : raw.length());
+            Matcher factMatcher = VIDEO_SHOT_FACT_PATTERN.matcher(beat);
+            StringBuilder selected = new StringBuilder();
+            while (factMatcher.find())
+            {
+                if (!selected.isEmpty())
+                {
+                    selected.append('；');
+                }
+                selected.append(factMatcher.group(1)).append('：').append(factMatcher.group(2).trim());
+            }
+            if (!selected.isEmpty())
+            {
+                if (!facts.isEmpty())
+                {
+                    facts.append(" | ");
+                }
+                facts.append("第").append(i + 1).append("段 ").append(selected);
+            }
+        }
+        return facts.toString();
     }
 
     /** 按条目单位取业务编号字段名：镜头单位取镜号，镜头组单位取镜头组。 */
@@ -2738,7 +2830,8 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
                 + StoryboardPromptBatchAligner.FIELD_SHOT_KEY + "：原样照抄该元素所对应" + unitLabel
                 + "标题里的身份标识，不得改写、不得自行编号；\n"
                 + bizNoField + "：原样照抄该" + unitLabel + "「" + bizNoField + "」字段的值。\n"
-                + "两个字段必须同时指向同一个" + unitLabel + "，不一致的元素会被判为无效。\n"
+                + "shotKey 是系统内部身份，" + bizNoField + " 是业务编号；两者的字符串允许不同，例如 SB-3 与 001。"
+                + "只需分别照抄同一输入段中的两个值，不得互相推算或要求数值相等。\n"
                 + "禁止合并、省略、截断或调整顺序，内容相似也必须逐个输出。\n";
     }
 
@@ -2812,6 +2905,57 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
         {
             out.append("【确定性场景上下文】\n").append(text);
         }
+    }
+
+    private void appendVideoSceneContext(StringBuilder out, StoryboardSceneContext context)
+    {
+        String text = storyboardSceneContextAssembler.formatPromptContext(context);
+        if (StrUtil.isBlank(text))
+        {
+            return;
+        }
+        String description = context.sceneDescription();
+        if (StrUtil.isNotBlank(description))
+        {
+            String videoFacts = videoSceneFacts(description);
+            text = text.replace("场景描述：" + description + '\n',
+                    StrUtil.isBlank(videoFacts) ? "" : "场景描述：" + videoFacts + '\n');
+        }
+        out.append("【确定性场景上下文】\n").append(text);
+    }
+
+    static String videoSceneFacts(String description)
+    {
+        String source = StrUtil.trimToEmpty(description);
+        if (source.isEmpty())
+        {
+            return "";
+        }
+        String featureLabel = source.contains("场景特征描述：") ? "场景特征描述：" : "场景特征描述:";
+        int featureStart = source.indexOf(featureLabel);
+        if (featureStart >= 0)
+        {
+            String facts = source.substring(featureStart + featureLabel.length());
+            for (String boundary : List.of("；四个视角", ";四个视角", "；图片风格", "；图像风格",
+                    "；画面风格", "；镜头视角", "；左上角"))
+            {
+                int end = facts.indexOf(boundary);
+                if (end >= 0)
+                {
+                    facts = facts.substring(0, end);
+                }
+            }
+            return facts.trim();
+        }
+        for (String imageRule : List.of("宫格", "分割线", "焦距", "相机高度", "输出一张", "生成一张",
+                "画幅比例", "图片风格", "图像风格"))
+        {
+            if (source.contains(imageRule))
+            {
+                return "";
+            }
+        }
+        return source;
     }
 
     /**
@@ -2895,6 +3039,53 @@ public class StoryboardVideoPromptServiceImpl implements IStoryboardVideoPromptS
             log.error("视频提示词 LLM 输出 JSON 数组解析失败: outputLen={}, err={}", text.length(), e.getMessage());
         }
         return result;
+    }
+
+    private String providerRejectionMessage(String llmRaw)
+    {
+        if (StrUtil.isBlank(llmRaw))
+        {
+            return "";
+        }
+        try
+        {
+            JsonNode root = OBJECT_MAPPER.readTree(llmRaw.trim());
+            if (Objects.isNull(root) || !root.isObject() || !root.hasNonNull("error"))
+            {
+                return "";
+            }
+            JsonNode error = root.path("error");
+            String reason = error.isTextual() ? error.asText("")
+                    : error.path("message").asText(error.path("reason").asText(""));
+            if (StrUtil.isBlank(reason))
+            {
+                return "";
+            }
+            String code;
+            String message;
+            if (reason.contains("shotKey") || reason.contains("镜头组") || reason.contains("业务编号"))
+            {
+                code = "PROVIDER_OUTPUT_REJECTED_IDENTITY_CONFLICT";
+                message = FAILURE_IDENTITY_CONFLICT;
+            }
+            else if (reason.contains("方向") || reason.contains("焦距")
+                    || reason.contains("距离") || reason.contains("量化"))
+            {
+                code = "PROVIDER_OUTPUT_REJECTED_SCENE_CONFLICT";
+                message = FAILURE_SCENE_CONFLICT;
+            }
+            else
+            {
+                code = "PROVIDER_OUTPUT_REJECTED";
+                message = FAILURE_PROVIDER_REJECTED;
+            }
+            log.warn("视频提示词模型明确拒绝业务输出: reasonCode={}", code);
+            return message;
+        }
+        catch (Exception ignored)
+        {
+            return "";
+        }
     }
 
     private String normalizeMultirefGlobalStyle(String prompt, String direction, String agentCode,

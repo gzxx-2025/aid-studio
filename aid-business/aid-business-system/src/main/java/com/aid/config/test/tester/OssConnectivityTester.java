@@ -3,8 +3,12 @@ package com.aid.config.test.tester;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
@@ -267,6 +271,11 @@ public class OssConnectivityTester implements ConfigConnectivityTester {
             if (Files.size(probeFile.toPath()) != PROBE_FILE_SIZE) {
                 return failWithDetails("本地写入校验失败", details + "; size=false");
             }
+            String probeUrl = publicPrefix + "/upload/" + PROBE_DIRECTORY + "/" + probeFile.getName();
+            if (!canReadLocalProbe(probeUrl)) {
+                return failWithDetails("资源访问地址无法读取上传文件，请检查协议、端口和转发配置",
+                        details + "; publicRead=failed");
+            }
             Files.delete(probeFile.toPath());
             probeFile = null;
             return success("local", details);
@@ -275,6 +284,26 @@ public class OssConnectivityTester implements ConfigConnectivityTester {
             return failWithDetails("本地目录不可写", details + "; " + e.getClass().getSimpleName());
         } finally {
             deleteLocalProbe(probeFile);
+        }
+    }
+
+    /** 用实际公开地址读取刚写入的随机文件，避免仅测试磁盘成功却保存不可用的域名。 */
+    private boolean canReadLocalProbe(String address) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(address).openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(4000);
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return false;
+            try (InputStream input = connection.getInputStream()) {
+                return Arrays.equals(PROBE_BYTES, input.readNBytes(PROBE_FILE_SIZE + 1));
+            }
+        } catch (Exception e) {
+            log.info("本地资源访问探测失败: exception={}", e.getClass().getSimpleName());
+            return false;
+        } finally {
+            if (connection != null) connection.disconnect();
         }
     }
 

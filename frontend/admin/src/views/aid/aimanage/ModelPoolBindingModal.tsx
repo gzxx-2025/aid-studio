@@ -32,6 +32,7 @@ interface CapabilityRow {
   modelName: string;
   poolId: number;
   poolName: string;
+  poolFuncCode: string;
   capabilities: ModelPoolCapability[];
 }
 
@@ -82,13 +83,17 @@ export default function ModelPoolBindingModal({ open, mode, models, snapshot, su
         if (model.id == null || pool.modelIds.includes(model.id)) return;
         const definitions = snapshotModelMap.get(model.id)?.capabilities || [];
         if (definitions.length === 0) return;
-        const capabilities = definitions.filter((capability) => capability.enabled);
+        const isMultiStoryboardPool = pool.funcCode === 'main_storyboard_video'
+          || pool.funcCode === 'main_storyboard_video_multi_pro';
+        const capabilities = definitions.filter((capability) => capability.enabled
+          && !(isMultiStoryboardPool && capability.generateMode === 'start_end_to_video'));
         result.push({
           key: relationKey(model.id, pool.id),
           modelId: model.id,
           modelName: model.modelName || model.modelCode,
           poolId: pool.id,
           poolName: pool.funcName,
+          poolFuncCode: pool.funcCode,
           capabilities
         });
       });
@@ -106,7 +111,10 @@ export default function ModelPoolBindingModal({ open, mode, models, snapshot, su
           return;
         }
         const defaults = row.capabilities.filter((capability) => capability.defaultCapability);
-        const initial = row.capabilities.length === 1 ? row.capabilities[0] : defaults.length === 1 ? defaults[0] : undefined;
+        const requiresExplicitChoice = row.poolFuncCode === 'main_storyboard_video'
+          || row.poolFuncCode === 'main_storyboard_video_multi_pro';
+        const initial = row.capabilities.length === 1 ? row.capabilities[0]
+          : !requiresExplicitChoice && defaults.length === 1 ? defaults[0] : undefined;
         next[row.key] = {
           capabilityCodes: initial ? [initial.code] : [],
           defaultCapabilityCode: initial?.code
@@ -249,7 +257,7 @@ export default function ModelPoolBindingModal({ open, mode, models, snapshot, su
         showIcon
         style={{ marginBottom: 14 }}
         message={mode === 'bind'
-          ? '选择模型池后配置本次新增关系的能力。模型已声明唯一默认能力时会自动选中，已有业务绑定保持不变。'
+          ? '选择模型池后配置本次新增关系的能力。多参分镜池有多种可用能力时须手动选择；已有业务绑定保持不变。'
           : '移出不删除模型。有业务引用时，下一步预览影响并选择池内替代文本模型；不会自动更换模型，也不能清空启用模型池。'}
       />
       {mode === 'bind' && disabledModelCount > 0 && (
@@ -278,7 +286,7 @@ export default function ModelPoolBindingModal({ open, mode, models, snapshot, su
         <section aria-label="新增关系能力配置" style={{ marginTop: 18 }}>
           <Space direction="vertical" size={4} style={{ marginBottom: 10 }}>
             <Typography.Text strong>新增关系能力</Typography.Text>
-            <Typography.Text type="secondary">仅影响本次新增的模型池关系；默认能力已按模型配置自动选择，可按业务需要调整。</Typography.Text>
+            <Typography.Text type="secondary">仅影响本次新增的模型池关系；请核对所选能力及默认能力后再绑定。</Typography.Text>
           </Space>
           {validationErrors.length > 0 && (
             <Alert type="error" showIcon style={{ marginBottom: 10 }} message={validationErrors[0]} />

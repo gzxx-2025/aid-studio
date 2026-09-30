@@ -794,7 +794,7 @@ public class TaskDispatchServiceImpl implements TaskDispatchService {
                 }
                 return composeClient.query(null, task.getProviderTaskId());
             }
-            AiModelConfigVo modelConfig = taskConfigurationResolver.resolve(task);
+            AiModelConfigVo modelConfig = taskConfigurationResolver.resolveForQuery(task);
             if (Objects.isNull(modelConfig)) {
                 log.warn("queryUpstream 模型配置缺失, taskId={}, modelName={}", task.getId(), task.getModelName());
                 return null;

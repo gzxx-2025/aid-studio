@@ -2,6 +2,7 @@
 
 import { LoadingOutlined } from '@ant-design/icons'
 import type { BillingQuoteVO } from '~/types/business-api'
+import { billingQuoteTextForDisplay } from '~/utils/billingQuoteDisplay'
 import './BillingQuoteHint.css'
 
 interface Props {
@@ -25,7 +26,7 @@ export function BillingQuoteHint({
   idleText = ''
 }: Props) {
   if (!active) return null
-  const text = String(quote?.displayText || '').trim()
+  const text = billingQuoteTextForDisplay(quote)
   const classes = ['billing-quote-hint', className].filter(Boolean).join(' ')
 
   if (loading) {

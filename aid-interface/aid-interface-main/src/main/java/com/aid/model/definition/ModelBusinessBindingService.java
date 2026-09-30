@@ -131,11 +131,24 @@ public class ModelBusinessBindingService {
         }
         if (requested != null && !requested.isBlank()) {
             if (permitted.stream().noneMatch(b -> requested.equals(b.getCapabilityCode()))) fail("业务未绑定此能力");
-            return requested;
+            return requireCompatibleCapability(modelId, funcCode, requested);
         }
         List<AidAiBusinessModelBinding> defaults = permitted.stream().filter(b -> Boolean.TRUE.equals(b.getDefaultCapability())).toList();
         if (defaults.size() != 1) fail("请明确调用能力");
-        return defaults.get(0).getCapabilityCode();
+        return requireCompatibleCapability(modelId, funcCode, defaults.get(0).getCapabilityCode());
+    }
+
+    private String requireCompatibleCapability(Long modelId, String funcCode, String capabilityCode) {
+        if (!"main_storyboard_video".equals(funcCode)
+                && !"main_storyboard_video_multi_pro".equals(funcCode)) return capabilityCode;
+        AidAiModelCapability definition = capabilities.selectOne(Wrappers.<AidAiModelCapability>lambdaQuery()
+                .eq(AidAiModelCapability::getModelId, modelId)
+                .eq(AidAiModelCapability::getCapabilityCode, capabilityCode));
+        if (definition != null && StoryboardVideoPoolCapabilityPolicy.rejects(
+                funcCode, definition.getGenerateMode())) {
+            fail("多参模型池绑定了首尾帧能力，请重新绑定正确的视频能力");
+        }
+        return capabilityCode;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -159,6 +172,13 @@ public class ModelBusinessBindingService {
         }
         for (AidAiBusinessModelBinding binding : requested) {
             if (binding == null || binding.getFuncCode() == null || !allowed.contains(binding.getCapabilityCode())) fail("业务能力绑定无效");
+            AidAiModelCapability chosen = rows.stream()
+                    .filter(row -> Objects.equals(row.getCapabilityCode(), binding.getCapabilityCode()))
+                    .findFirst().orElse(null);
+            if (chosen != null && StoryboardVideoPoolCapabilityPolicy.rejects(
+                    binding.getFuncCode(), chosen.getGenerateMode())) {
+                fail("多参模型池不能绑定首尾帧能力，请使用首尾帧模型池");
+            }
             if (!unique.add(binding.getFuncCode() + "/" + binding.getCapabilityCode())) fail("业务能力绑定重复");
             functionCodes.add(binding.getFuncCode());
             if (binding.getDefaultsJson() != null && !binding.getDefaultsJson().isBlank()) {

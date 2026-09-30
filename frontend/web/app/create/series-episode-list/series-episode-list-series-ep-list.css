@@ -157,6 +157,44 @@
   background: rgba(32, 36, 52, 0.5);
 }
 
+.series-ep-list__row--appended {
+  animation: episode-row-append 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes episode-row-append {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.series-ep-list__footer {
+  min-height: 48px;
+  text-align: center;
+}
+
+.series-ep-list__footer button,
+.series-ep-list__empty button {
+  border: 0;
+  background: transparent;
+  color: #4ae7fd;
+  cursor: pointer;
+}
+
+.series-ep-list__footer button {
+  padding: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .series-ep-list__row--appended {
+    animation: none;
+  }
+}
+
 .series-ep-list__cell--ep {
   display: flex;
   align-items: center;

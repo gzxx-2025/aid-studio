@@ -47,8 +47,9 @@ export function createStoryboardVideoBatchSubmitFields(
     const passDuration = shouldPassStoryboardVideoDuration(
       store.formData.globalSetting?.creationMode
     )
+    // Batch generation leaves duration to each storyboard; never reuse the single-item setting.
     const durationSeconds = passDuration
-      ? normalizePositiveInteger(options?.genDurationSeconds ?? settings.durationSeconds)
+      ? normalizePositiveInteger(options?.genDurationSeconds)
       : undefined
     const resolution = formatVideoResolutionForApi(settings.resolution)
     return {

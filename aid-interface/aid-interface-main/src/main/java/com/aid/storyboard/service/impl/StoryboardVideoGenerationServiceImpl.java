@@ -285,6 +285,9 @@ public class StoryboardVideoGenerationServiceImpl implements IStoryboardVideoGen
     }
 
     @Autowired
+    private com.aid.rps.assembler.StoryboardSceneContextAssembler plannedSceneContextAssembler;
+
+    @Autowired
     private RedisCache redisCache;
 
     @Autowired
@@ -705,6 +708,7 @@ public class StoryboardVideoGenerationServiceImpl implements IStoryboardVideoGen
         {
             throw new ServiceException("模型不存在");
         }
+        com.aid.media.provider.VideoProviderConfigurationValidator.validate(modelConfig);
         return modelConfig;
     }
 
@@ -2384,6 +2388,14 @@ public class StoryboardVideoGenerationServiceImpl implements IStoryboardVideoGen
                 ? null : resolveBaseImageUrl(single ? request.getBaseImageRecordId() : null, storyboard, userId);
         int maxReferences = ReferenceImageLimiter.resolveMax(modelConfig, MAX_REFERENCE_IMAGES);
         String plannedPrompt = single ? StrUtil.blankToDefault(request.getVideoPrompt(), "") : "";
+        if (StrUtil.isBlank(plannedPrompt) && !forbidsImageInput && !videoSourceOnly)
+        {
+            Map<String, Object> params = com.aid.storyboard.video.StoryboardPlannedImageReferences.parseParams(
+                    storyboard.getScriptParams());
+            var contexts = plannedSceneContextAssembler.assemble(List.of(storyboard), storyboard.getProjectId(), userId);
+            plannedSceneContextAssembler.applyReferenceInfo(params, contexts.get(storyboard.getId()));
+            plannedPrompt = com.aid.storyboard.video.StoryboardPlannedImageReferences.buildPrompt(params);
+        }
         ReferenceResolution resolution = resolveReferences(plannedPrompt, storyboard, userId,
                 single ? request.getReferenceOverrides() : null, false, false);
         int actualReferenceImages = countDistinctReferenceImages(resolution.references, baseImageUrl);

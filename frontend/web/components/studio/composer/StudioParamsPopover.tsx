@@ -90,6 +90,8 @@ export function StudioParamsPopover({
 
   // 与编辑分镜视频弹窗一致：模型 capability 变化后收敛当前选中值
   useEffect(() => {
+    // 未取得模型能力时不能用兜底规格覆盖已保存的节点参数。
+    if (!model) return
     const current = valueRef.current
     if (mode === 'video') {
       const desiredDuration = resolvedRecommendedDuration ?? current.duration ?? snapshot.defaultDurationSeconds
@@ -136,7 +138,7 @@ export function StudioParamsPopover({
         quality: coerced.quality
       })
     }
-  }, [mode, resolvedRecommendedDuration, snapshot])
+  }, [mode, model, resolvedRecommendedDuration, snapshot])
 
   const activeQualityLabel = qualityOptions.find((item) => item.value === value.quality)?.label
     ?? value.quality

@@ -82,6 +82,11 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     }
 
     @Override
+    public AiModelConfigVo selectByModelCodeForUser(String modelCode, Long userId, String capabilityCode) {
+        return invocationResolver.select(selectByModelCodeForUser(modelCode, userId), capabilityCode);
+    }
+
+    @Override
     public AiModelConfigVo selectByCategoryWithHighestPriority(String category) {
         AidAiModel model = aidAiModelService.getOne(
             Wrappers.<AidAiModel>lambdaQuery()

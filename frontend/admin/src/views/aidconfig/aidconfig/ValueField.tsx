@@ -220,7 +220,7 @@ export default function ValueField({ name, value, onChange, models, category }: 
           placeholder="https://cdn.example.com"
         />
         <div style={{ marginTop: 6, color: '#64748b', fontSize: 12, lineHeight: '20px' }}>
-          必填。只填写协议和域名，不要填写 /profile、对象路径或查询参数。系统页面正常展示资源时使用此地址；不会自动给普通展示链接加签名。
+          必填。填写浏览器和服务端都能访问的完整地址；使用非默认端口时须写明端口（如 https://media.example.com:8443）。不要填写 /profile、对象路径或查询参数。保存前会验证上传文件能否通过此地址读取。
         </div>
       </div>
     );

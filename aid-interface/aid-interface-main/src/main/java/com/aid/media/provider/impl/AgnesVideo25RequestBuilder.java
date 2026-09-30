@@ -67,11 +67,17 @@ public final class AgnesVideo25RequestBuilder {
 
     /** 完整校验只读取本地参数，不下载素材、不请求上游。 */
     public static void validateFullRequest(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request) {
+        validateFullRequest(modelConfig, request, false);
+    }
+
+    /** 计划报价仅延后尚未生成的提示词必填检查，仍校验所有已知输入与规格。 */
+    public static void validateFullRequest(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request,
+                                           boolean promptPending) {
         if (!supportsModel(modelConfig) || request == null) {
             return;
         }
         Inputs inputs = collect(request);
-        require(StrUtil.isNotBlank(request.getPrompt()), "提示词不能为空");
+        require(promptPending || StrUtil.isNotBlank(request.getPrompt()), "提示词不能为空");
         validateN(request);
 
         int seconds = duration(request);

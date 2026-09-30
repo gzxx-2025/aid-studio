@@ -985,8 +985,8 @@ public class SkillPackageAdminServiceImpl implements ISkillPackageAdminService {
         result.setInvocationScope(version.getInvocationScope());
         result.setPublishStatus(version.getPublishStatus());
         result.setExecutorType(version.getExecutorType());
-        result.setModelCode(version.getModelCode());
         SkillModelConfiguration modelConfig = SkillModelConfiguration.from(version);
+        result.setModelCode(modelConfig.defaultModelCode());
         result.setModelConfigJson(version.getModelConfigJson());
         result.setDefaultModelCode(modelConfig.defaultModelCode());
         result.setSelectableModelCodes(modelConfig.selectableModelCodes());
@@ -1085,8 +1085,8 @@ public class SkillPackageAdminServiceImpl implements ISkillPackageAdminService {
         DraftDocument document = new DraftDocument();
         document.setBaseVersionId(version.getId());
         document.setSkillId(version.getSkillId());
-        document.setModelCode(version.getModelCode());
         SkillModelConfiguration modelConfig = SkillModelConfiguration.from(version);
+        document.setModelCode(modelConfig.defaultModelCode());
         document.setDefaultModelCode(modelConfig.defaultModelCode());
         document.setSelectableModelCodes(new ArrayList<>(modelConfig.selectableModelCodes()));
         document.setSystemPrompt(version.getSystemPrompt());

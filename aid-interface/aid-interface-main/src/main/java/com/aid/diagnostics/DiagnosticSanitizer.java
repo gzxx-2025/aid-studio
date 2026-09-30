@@ -87,10 +87,11 @@ public class DiagnosticSanitizer {
             return redactText(text);
         }
         if(value==null || value instanceof Number || value instanceof Boolean)return value;
-        // DTO 可嵌套在参数列表或响应 Map 中，不能等最终入库序列化时才展开。
+        // DTO 只展开一次，再遍历 JSON 树脱敏。ValueFilter 内递归 visit 会让
+        // 已展开的每个子树被父级重复遍历，嵌套模型能力响应会产生指数级开销。
         try {return visit(JSON.parse(JSON.toJSONString(value,(com.alibaba.fastjson2.filter.ValueFilter)(object,name,field)->{
             if(secretField(name)){DiagnosticCapture.modelSecret(field);return "[已过滤秘密字段]";}
-            return visit(field,path,depth+1);
+            return field;
         },com.alibaba.fastjson2.JSONWriter.Feature.ReferenceDetection)),path,depth+1);}
         catch(RuntimeException | StackOverflowError unavailable){return Map.of("capture","对象无法安全转换，该分支未采集","type",value.getClass().getSimpleName());}
     }

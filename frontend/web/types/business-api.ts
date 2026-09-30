@@ -1110,11 +1110,22 @@ export interface UserAssetRpsSceneImageSplitChildRow {
   sortOrder?: number
 }
 
-export interface UserAssetRpsSceneImageSplitData {
+export interface UserAssetRpsSceneImageSplitResult {
   sourceImageId: number
   assetId: number
   formId: number
   children: UserAssetRpsSceneImageSplitChildRow[]
+}
+
+export interface UserAssetRpsSceneImageSplitData {
+  summary: {
+    total: number
+    successCount: number
+    failCount: number
+    successIds: number[]
+    failures: Array<{ id: number | null; reason: string }>
+  }
+  results: UserAssetRpsSceneImageSplitResult[]
 }
 
 /** POST /api/user/asset/rps/form-image/upscale（v2.24+ 异步高清） */

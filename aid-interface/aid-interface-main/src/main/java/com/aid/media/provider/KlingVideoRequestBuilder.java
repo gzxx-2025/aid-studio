@@ -40,20 +40,37 @@ public final class KlingVideoRequestBuilder {
      */
     public static Map<String, Object> buildSubmissionBody(AiModelConfigVo config,
                                                            MediaVideoGenerateRequest request) {
+        return buildSubmissionBody(config, request, false);
+    }
+
+    private static Map<String, Object> buildSubmissionBody(AiModelConfigVo config,
+                                                           MediaVideoGenerateRequest request,
+                                                           boolean promptPending) {
         int dispatchedImages = validateRequestInputs(config, request);
         MediaVideoGenerateRequest sanitized = new MediaVideoGenerateRequest();
         BeanUtil.copyProperties(request, sanitized);
         sanitized.setPrompt(ReferencePromptSanitizer.sanitizePreservingSubjectRefs(
             request.getPrompt(), dispatchedImages, 0));
-        return build(config, sanitized);
+        return build(config, sanitized, promptPending);
     }
 
     /** 在任务落库和冻结前执行完整可灵 Provider 请求契约校验。 */
     public static void validateFullRequest(AiModelConfigVo config, MediaVideoGenerateRequest request) {
-        buildSubmissionBody(config, request);
+        validateFullRequest(config, request, false);
+    }
+
+    /** 计划报价不构造占位提示词；已知素材、设置和已有提示词仍完整校验。 */
+    public static void validateFullRequest(AiModelConfigVo config, MediaVideoGenerateRequest request,
+                                           boolean promptPending) {
+        buildSubmissionBody(config, request, promptPending);
     }
 
     public static Map<String, Object> build(AiModelConfigVo config, MediaVideoGenerateRequest request) {
+        return build(config, request, false);
+    }
+
+    private static Map<String, Object> build(AiModelConfigVo config, MediaVideoGenerateRequest request,
+                                             boolean promptPending) {
         if (config == null || request == null) {
             return fail("null model or request", "模型配置无效");
         }
@@ -124,13 +141,15 @@ public final class KlingVideoRequestBuilder {
         String prompt = rehydratePrompt(StrUtil.trim(request.getPrompt()), placeholderImageIds);
         prompt = retainOnlyDispatchedReferences(prompt, allowedReferenceIds);
         int promptMax = isOmni(scenario) ? 3072 : 2500;
-        if (StrUtil.isBlank(prompt) || prompt.length() > promptMax) {
+        if ((!promptPending && StrUtil.isBlank(prompt)) || StrUtil.length(prompt) > promptMax) {
             fail("prompt length=" + StrUtil.length(prompt), "提示词无效");
         }
-        Map<String, Object> promptContent = new LinkedHashMap<>();
-        promptContent.put("type", "prompt");
-        promptContent.put("text", prompt);
-        contents.add(0, promptContent);
+        if (StrUtil.isNotBlank(prompt)) {
+            Map<String, Object> promptContent = new LinkedHashMap<>();
+            promptContent.put("type", "prompt");
+            promptContent.put("text", prompt);
+            contents.add(0, promptContent);
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("contents", contents);

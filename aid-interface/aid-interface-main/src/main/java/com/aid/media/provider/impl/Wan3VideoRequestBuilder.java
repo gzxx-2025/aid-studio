@@ -69,6 +69,12 @@ public final class Wan3VideoRequestBuilder {
 
     /** 完整校验只读取本地参数，不下载素材、不请求上游。 */
     public static void validateFullRequest(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request) {
+        validateFullRequest(modelConfig, request, false);
+    }
+
+    /** 计划报价允许提示词尚未生成，素材组合、时长与规格继续完整校验。 */
+    public static void validateFullRequest(AiModelConfigVo modelConfig, MediaVideoGenerateRequest request,
+                                           boolean promptPending) {
         if (!supportsModel(modelConfig) || request == null) {
             return;
         }
@@ -85,7 +91,7 @@ public final class Wan3VideoRequestBuilder {
             require(StrUtil.isNotBlank(request.getImageUrl()), "缺少首帧");
             require(!hasReferenceMedia, "素材组合错误");
         }
-        require(StrUtil.isNotBlank(request.getPrompt()) || inputs.hasAnyMedia(), "缺少生成内容");
+        require(promptPending || StrUtil.isNotBlank(request.getPrompt()) || inputs.hasAnyMedia(), "缺少生成内容");
 
         String resolution = resolution(request);
         require(RESOLUTIONS.contains(resolution), "分辨率不支持");

@@ -325,19 +325,21 @@ public class OpenAiImageProviderClient implements ImageProviderClient {
             if (StringUtils.isNotBlank(optSize) && explicit == null) {
                 throw new ServiceException("图片尺寸无效");
             }
+            if (explicit != null && !target.equals(explicit)) {
+                throw new ServiceException("扩图目标尺寸与输出尺寸冲突");
+            }
             if (explicit == null) {
                 explicit = normalizeSize(request.getSize());
                 if (StringUtils.isNotBlank(request.getSize()) && explicit == null) {
                     throw new ServiceException("图片尺寸无效");
                 }
             }
-            if (explicit != null && !target.equals(explicit)) {
-                throw new ServiceException("扩图目标尺寸与输出尺寸冲突");
-            }
             if (StringUtils.isNotBlank(ratio) && !matchesAspectRatio(target, ratio)) {
                 throw new ServiceException("扩图目标尺寸与画幅比例冲突");
             }
-            return target;
+            // request.size is the provider's accepted output preset. The protected canvas
+            // keeps targetWidth/targetHeight and is restored to those pixels after generation.
+            return explicit != null ? explicit : target;
         }
         String byRatio = sizeFromAspectRatio(ratio);
         String normalized = normalizeSize(optSize);

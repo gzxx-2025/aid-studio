@@ -7,6 +7,7 @@ matchesCreationLiveGenScope
 } from '~/composables/useCreationLiveGenScopeGuard'
 import { formatCreationImageProgressText,runEditImageTask } from '~/composables/useEditImageTask'
 import { userAssetRpsFormImageSceneSplit } from '~/utils/businessApi'
+import { mapFormImageRowToLocalImage } from './useSceneModalImageList'
 import { resolveDialogueToolbarSourceImages } from '~/utils/formImageEditPrefill'
 import { storyboardPromptHtmlToPlain } from '~/utils/storyboardPromptAssetRef'
 import { EDIT_ASSET_PROMPT_MAX_CHARS } from '~/utils/htmlPlain'
@@ -207,6 +208,7 @@ export function useSceneModalGenerate(ctx: EditSceneImageModalCtx): SceneModalGe
 
     ctx.currentImageIndex.set(index)
     const sceneIdx = ctx.currentSceneIndex.get()
+    const editorScopeKey = ctx.buildEditorScopeKeyForSceneIndex(sceneIdx)
     ctx.sceneSplitTargetKey.set(ctx.buildCanvasOverlayKey(sceneIdx, index))
     ctx.isSceneSplitting.set(true)
     ctx.sceneSplitProgressText.set('正在准备…')
@@ -239,16 +241,29 @@ export function useSceneModalGenerate(ctx: EditSceneImageModalCtx): SceneModalGe
 
       ctx.sceneSplitProgressText.set('正在拆分四宫格…')
       const result = await userAssetRpsFormImageSceneSplit({ projectId, sourceImageId })
+      if (!ctx.props().open || ctx.currentSceneIndex.get() !== sceneIdx
+        || ctx.buildEditorScopeKeyForSceneIndex(sceneIdx) !== editorScopeKey) return
+      const split = result.results?.find((item) => Number(item.sourceImageId) === sourceImageId)
+      const firstChildId = split?.children?.[0]?.id
+      if (result.summary?.successCount !== 1 || !firstChildId) {
+        throw new Error(result.summary?.failures?.[0]?.reason || '四宫格拆分未生成图片')
+      }
 
       ctx.lastInitFormImageListKey.current = ''
-      await ctx.initFormImageListOnOpen()
-
-      const firstChildId = result.children?.[0]?.id
-      if (firstChildId != null) {
-        const childIdx = ctx.localSceneImages.get().findIndex(
-          (x: { rpsImageId?: number }) => Number(x?.rpsImageId) === Number(firstChildId)
+      await ctx.initFormImageListOnOpen({ focusImageId: firstChildId })
+      const childIdx = ctx.localSceneImages.get().findIndex(
+        (x: { rpsImageId?: number }) => Number(x?.rpsImageId) === Number(firstChildId)
+      )
+      if (childIdx < 0) {
+        const existing = ctx.localSceneImages.get().map((item: any) =>
+          Number(item?.rpsImageId) === sourceImageId ? { ...item, canSplit: false } : item
         )
-        if (childIdx >= 0) ctx.currentImageIndex.set(childIdx)
+        const known = new Set(existing.map((item: any) => Number(item?.rpsImageId)))
+        const children = split.children.filter((child) => child.imageUrl && !known.has(Number(child.id)))
+          .map((child, childIndex) => mapFormImageRowToLocalImage(child, split.formId, existing.length + childIndex))
+        ctx.localSceneImages.set([...existing, ...children])
+        const firstIndex = ctx.localSceneImages.get().findIndex((item: any) => Number(item?.rpsImageId) === Number(firstChildId))
+        if (firstIndex >= 0) ctx.currentImageIndex.set(firstIndex)
       }
 
       ctx.emitSceneTabUpdate(ctx.buildVisibleImagesForParent())

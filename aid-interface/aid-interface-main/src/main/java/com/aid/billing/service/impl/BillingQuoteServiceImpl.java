@@ -132,8 +132,10 @@ public class BillingQuoteServiceImpl implements BillingQuoteService
     private BillingQuoteVO quoteImagePricing(JsonNode payload, Long userId)
     {
         ImagePricingQuotePayload pricing = convertAndValidate(payload, ImagePricingQuotePayload.class);
+        String mode = pricing.getGenerateMode().trim().toUpperCase(Locale.ROOT);
+        String capabilityCode = "TEXT_TO_IMAGE".equals(mode) ? "text_to_image" : "image_to_image";
         AiModelConfigVo modelConfig = aiModelConfigService.selectByModelCodeForUser(
-                pricing.getModelCode(), userId);
+                pricing.getModelCode(), userId, capabilityCode);
         if (modelConfig == null || !"image".equalsIgnoreCase(modelConfig.getModelType()))
         {
             throw new ServiceException("图片模型不可用");
@@ -221,6 +223,8 @@ public class BillingQuoteServiceImpl implements BillingQuoteService
         }
         MediaImageGenerateRequest media = new MediaImageGenerateRequest();
         media.setModelName(modelConfig.getModelCode());
+        media.setPrompt(pricing.getPrompt() == null || pricing.getPrompt().isBlank()
+                ? "图片报价" : pricing.getPrompt().trim());
         String effectiveSize = pricing.getSize();
         if ((effectiveSize == null || effectiveSize.isBlank())
                 && pricing.getResolution() != null && !pricing.getResolution().isBlank())
