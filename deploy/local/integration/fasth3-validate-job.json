@@ -1,0 +1,20 @@
+{
+  "jobId": 0,
+  "source": "adapter-validation",
+  "profile": "h3-single-fast",
+  "payload": {
+    "videoRequest": {
+      "model": "MiniMax-H3",
+      "duration": 5,
+      "resolution": "480P",
+      "ratio": "16:9",
+      "content": [
+        {
+          "type": "text",
+          "text": "A calm cinematic wide shot of a rural village at sunrise, gentle camera movement, realistic natural light."
+        }
+      ]
+    }
+  },
+  "gpuIds": []
+}

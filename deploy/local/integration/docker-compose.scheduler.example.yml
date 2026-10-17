@@ -1,0 +1,43 @@
+# Example only. The application container intentionally receives no GPU device.
+services:
+  project-worker:
+    image: your-project/worker:latest
+    environment:
+      AID_GPU_MANAGER_URL: https://gpu-manager.internal
+      AID_GPU_MANAGER_API_KEY_FILE: /run/secrets/gpu_manager_api_key
+      AID_GPU_MANAGER_CA_FILE: /etc/aid-gpu/ca.crt
+    secrets:
+      - gpu_manager_api_key
+    configs:
+      - source: gpu_manager_ca
+        target: /etc/aid-gpu/ca.crt
+    networks:
+      - app-network
+    # Deliberately absent:
+    #   runtime: nvidia
+    #   gpus: all
+    #   deploy.resources.reservations.devices
+    #   /dev/nvidia* mounts
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - >-
+          import os,urllib.request;
+          urllib.request.urlopen(os.environ['AID_GPU_MANAGER_URL'].rstrip('/') + '/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+secrets:
+  gpu_manager_api_key:
+    file: ./secrets/gpu_manager_api_key.txt
+
+configs:
+  gpu_manager_ca:
+    file: ./certs/aid-gpu-ca.crt
+
+networks:
+  app-network:
+    driver: bridge

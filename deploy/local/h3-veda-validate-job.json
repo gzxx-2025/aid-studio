@@ -1,0 +1,18 @@
+{
+  "profile": "h3-veda-fast",
+  "payload": {
+    "videoRequest": {
+      "model": "MiniMax-H3",
+      "duration": 4,
+      "resolution": "480P",
+      "ratio": "16:9",
+      "acceleration": "fast_veda",
+      "content": [
+        {
+          "type": "text",
+          "text": "A quiet cinematic landscape with subtle natural motion."
+        }
+      ]
+    }
+  }
+}

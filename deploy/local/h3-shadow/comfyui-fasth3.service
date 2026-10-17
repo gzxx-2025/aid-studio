@@ -1,0 +1,16 @@
+[Unit]
+Description=ComfyUI FastH3 CUDA 13 shadow worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/neo/comfyui-fasth3-shadow/ComfyUI
+ExecStart=/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python /home/neo/comfyui-fasth3-shadow/ComfyUI/main.py --listen 0.0.0.0 --port 8191 --cuda-device 1 --disable-async-offload --reserve-vram 2 --extra-model-paths-config /home/neo/comfyui-fasth3-shadow/extra_model_paths.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+
+[Install]
+WantedBy=default.target

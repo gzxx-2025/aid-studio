@@ -1,0 +1,22 @@
+[Unit]
+Description=AID GPU Resource Node Agent
+After=network-online.target nvidia-persistenced.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aid-gpu-agent
+Group=aid-gpu-agent
+SupplementaryGroups=video render
+WorkingDirectory=/opt/aid-studio
+ExecStart=/usr/bin/python3 /opt/aid-studio/deploy/local/gpu_resource_agent.py --config /etc/aid-gpu-agent.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aid-gpu-agent
+
+[Install]
+WantedBy=multi-user.target
