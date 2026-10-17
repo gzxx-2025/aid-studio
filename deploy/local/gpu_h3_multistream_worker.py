@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Allow-listed scheduler worker for isolated H3 MultiStream benchmarks."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_multistream_benchmark.py")
+ALLOWED_MODES = {"single-dense", "dual-dense", "dual-sol", "dual-vsa"}
+
+
+def wait_runtime(timeout_seconds: int = 900) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8193/object_info", timeout=15) as response:
+                nodes = json.load(response)
+            required = {"H3MultiStream", "BlockSparseAttention", "MiniMaxH3ImageToVideo"}
+            missing = required - set(nodes)
+            if missing:
+                raise RuntimeError("runtime is missing nodes: " + ", ".join(sorted(missing)))
+            return
+        except (OSError, ValueError, RuntimeError, urllib.error.URLError) as exc:
+            last_error = exc
+            time.sleep(2)
+    raise RuntimeError(f"MultiStream runtime did not become ready: {last_error}")
+
+
+def load_job(path: Path) -> dict:
+    if not path.is_file() or path.stat().st_size > 1024 * 1024:
+        raise RuntimeError("job file is missing or too large")
+    job = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(job, dict) or job.get("profile") != "h3-dual-dense":
+        raise RuntimeError("job profile must be h3-dual-dense")
+    return job
+
+
+def validated(job: dict) -> dict:
+    payload = job.get("payload")
+    benchmark = payload.get("benchmark") if isinstance(payload, dict) else None
+    if not isinstance(benchmark, dict):
+        raise RuntimeError("payload.benchmark is required")
+    mode = str(benchmark.get("mode") or "")
+    model = str(benchmark.get("model") or "standard")
+    resolution = str(benchmark.get("resolution") or "480P").upper()
+    duration = int(benchmark.get("duration") or 4)
+    steps = int(benchmark.get("steps") or (8 if model == "fast" else 20))
+    chunks = int(benchmark.get("exchangeChunks") or 8)
+    if mode not in ALLOWED_MODES:
+        raise RuntimeError("unsupported benchmark mode")
+    if model not in {"standard", "fast"} or resolution not in {"480P", "768P"}:
+        raise RuntimeError("unsupported model or resolution")
+    if duration not in {4, 5} or steps not in {4, 8, 20} or chunks not in {0, 8}:
+        raise RuntimeError("unsupported benchmark parameters")
+    if mode == "dual-vsa" and model != "fast":
+        raise RuntimeError("dual-vsa requires model=fast")
+    if model == "fast" and steps != 8:
+        raise RuntimeError("FastH3 requires 8 steps")
+    return {
+        "mode": mode, "model": model, "resolution": resolution,
+        "duration": duration, "steps": steps, "exchangeChunks": chunks,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("job_file")
+    parser.add_argument("--timeout", type=int, default=7200)
+    args = parser.parse_args()
+    item = validated(load_job(Path(args.job_file)))
+    wait_runtime()
+    width, height = (1344, 768) if item["resolution"] == "768P" else (832, 480)
+    command = [
+        "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(SCRIPT),
+        "--mode", item["mode"], "--model", item["model"],
+        "--width", str(width), "--height", str(height),
+        "--duration", str(float(item["duration"])), "--steps", str(item["steps"]),
+        "--exchange-chunks", str(item["exchangeChunks"]),
+        "--timeout-seconds", str(max(300, min(args.timeout, 7200))),
+        "--prefix", f"h3-multistream/{item['mode']}",
+    ]
+    result = subprocess.run(command, text=True, capture_output=True, timeout=7500, check=False)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "benchmark failed")[-4000:])
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError("benchmark returned no result")
+    output = json.loads(lines[-1])
+    output["resultRef"] = json.dumps(output.get("output"), ensure_ascii=False)
+    print(json.dumps(output, ensure_ascii=False, separators=(",", ":")))
+
+
+if __name__ == "__main__":
+    main()

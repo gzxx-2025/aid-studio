@@ -2,6 +2,8 @@
 
 Use this protocol for MultiStream, sparse attention, cache, quantization, or runtime comparisons. Keep production traffic out of the experiment window.
 
+Do not rely on unique node IDs to force a new ComfyUI execution. They may still return a cached output. Use a dedicated `IS_CHANGED` benchmark node downstream of reusable loaders, and reject any run that reuses the previous filename or completes without sampler log entries. `--cache-none` forces execution but also defeats model residency, so it cannot establish a warm baseline.
+
 ## Fixed comparison inputs
 
 Persist the exact prompt, negative prompt, seed, reference files and hashes, checkpoint hash, LoRA hash, workflow hash, ComfyUI commit, custom-node commits, PyTorch/CUDA versions, dimensions, frame count, FPS, sampler, scheduler, steps, CFG, shift, denoise, VAE mode, and audio setting.
@@ -51,6 +53,8 @@ Compare dense and candidate outputs side by side at the same seed. Review at lea
 - audio synchronization and corruption.
 
 MultiStream dense should be bit-exact or explainably deterministic relative to its single-GPU baseline. Sparse and cache methods may change the trajectory; they still require an editorial pass-rate comparison across multiple prompts.
+
+For bit-exact checks, hash decoded video frames and decoded audio frames. Container hashes are not sufficient because mux metadata can differ.
 
 ## Stop and rollback conditions
 

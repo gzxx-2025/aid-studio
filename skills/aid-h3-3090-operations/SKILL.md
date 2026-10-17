@@ -34,6 +34,7 @@ For a daily cold start followed by warm jobs, subtract the measured cold penalty
 ## Benchmarking or changing acceleration
 
 Read [references/benchmark-protocol.md](references/benchmark-protocol.md) before testing MultiStream, Sol-Attn, VSA, caching, a new quant, or a new runtime. Establish a same-seed dense baseline first and change one independent variable at a time.
+Use [references/acceleration-candidates.md](references/acceleration-candidates.md) to distinguish RTX 3090 candidates from newer-GPU-only research before downloading or deploying anything.
 
 An acceleration can be recommended for production only when all of these are true:
 
@@ -57,6 +58,9 @@ For implementation or incident work, inspect only the relevant files:
 - `deploy/local/gpu_resource_agent.py`
 - `deploy/local/gpu_h3_quality_worker.py`
 - `deploy/local/gpu_fasth3_worker.py`
+- `deploy/local/gpu_h3_multistream_worker.py`
+- `deploy/local/h3-shadow/run_multistream_benchmark.py`
 - `deploy/local/comfy_h3_adapter.py`
+- `docs/benchmarks/h3-multistream-3090-2026-10-17.md`
 
 Do not expose `.runtime/secrets/gpu_manager_api_key` or any administrator token in commands, output, logs, commits, or reports.
