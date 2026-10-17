@@ -70,3 +70,22 @@ Run the safe 832x480 control and Veda cases with the same seed:
 Do not start a benchmark while production port `8188` has a running or pending
 job. The two instances share GPU 0 and a simultaneous H3 run can invalidate
 timings or cause an out-of-memory failure.
+
+## Conditioning and latent phase cache
+
+The isolated dual-GPU lab on port `8193` also contains the pinned MIT-licensed
+cache nodes from `pepikir/minimax-h3-speedup` commit
+`4081f500ed733eebcdb5853cb0a75b9aa5e14c9f`. The benchmark splits a render into
+text conditioning, diffusion/latent save, and VAE decode phases:
+
+```bash
+./env-cu130/bin/python ./run_conditioning_cache_benchmark.py \
+  --url http://127.0.0.1:8193 --mode dual-dense \
+  --dit int8 --text-encoder int8 \
+  --width 832 --height 480 --duration 4 --steps 20
+```
+
+Use this only for trusted local cache files. A cache key must change whenever
+the prompt, reference hashes, dimensions, frame count, checkpoint, text
+encoder, VAE, LoRA, or conditioning parameters change. The current validation
+is text-to-video only; reference-image cache reuse is not approved.

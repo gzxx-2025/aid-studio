@@ -28,6 +28,12 @@ Use the same input for every arm. Run a cold pass and at least two warm passes. 
 7. Optional text-encoder output cache, pinned weight cache, VAE split decode, or first-block cache as separate variables.
 8. Quantized checkpoint candidates last, because they change memory, compatibility, and possibly output quality simultaneously.
 
+For a conditioning/latent cache arm, persist and validate a cache manifest. Its
+key must cover the prompt and negative prompt, reference file hashes and order,
+dimensions, frame count, checkpoint and text-encoder hashes, VAE, LoRA,
+conditioning parameters and runtime schema. Treat a cache miss or metadata
+mismatch as a hard miss. Never load cache files supplied by an untrusted user.
+
 ## Measurements
 
 Record for each run:

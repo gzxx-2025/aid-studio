@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_multistream_benchmark.py")
+CACHE_SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_conditioning_cache_benchmark.py")
 ALLOWED_MODES = {"single-dense", "dual-dense", "dual-sol", "dual-vsa"}
 
 
@@ -23,7 +24,11 @@ def wait_runtime(timeout_seconds: int = 900) -> None:
         try:
             with urllib.request.urlopen("http://127.0.0.1:8193/object_info", timeout=15) as response:
                 nodes = json.load(response)
-            required = {"H3MultiStream", "BlockSparseAttention", "MiniMaxH3ImageToVideo"}
+            required = {
+                "H3MultiStream", "BlockSparseAttention", "MiniMaxH3ImageToVideo",
+                "H3SaveConditioning", "H3LoadConditioning",
+                "H3SaveLatentAV", "H3LoadLatentAV",
+            }
             missing = required - set(nodes)
             if missing:
                 raise RuntimeError("runtime is missing nodes: " + ", ".join(sorted(missing)))
@@ -48,12 +53,15 @@ def validated(job: dict) -> dict:
     benchmark = payload.get("benchmark") if isinstance(payload, dict) else None
     if not isinstance(benchmark, dict):
         raise RuntimeError("payload.benchmark is required")
+    experiment = str(benchmark.get("experiment") or "multistream")
     mode = str(benchmark.get("mode") or "")
     model = str(benchmark.get("model") or "standard")
     resolution = str(benchmark.get("resolution") or "480P").upper()
     duration = int(benchmark.get("duration") or 4)
     steps = int(benchmark.get("steps") or (8 if model == "fast" else 20))
     chunks = int(benchmark.get("exchangeChunks") or 8)
+    if experiment not in {"multistream", "conditioning-cache"}:
+        raise RuntimeError("unsupported benchmark experiment")
     if mode not in ALLOWED_MODES:
         raise RuntimeError("unsupported benchmark mode")
     if model not in {"standard", "fast"} or resolution not in {"480P", "768P"}:
@@ -64,10 +72,33 @@ def validated(job: dict) -> dict:
         raise RuntimeError("dual-vsa requires model=fast")
     if model == "fast" and steps != 8:
         raise RuntimeError("FastH3 requires 8 steps")
+    dit = str(benchmark.get("dit") or "int8")
+    text_encoder = str(benchmark.get("textEncoder") or "int8")
+    skip_baseline = bool(benchmark.get("skipBaseline", False))
+    if experiment == "conditioning-cache":
+        if mode not in {"single-dense", "dual-dense"} or model != "standard":
+            raise RuntimeError("conditioning-cache requires the standard dense model")
+        if dit not in {"int8", "w6a8"} or text_encoder not in {"int8", "nvfp4"}:
+            raise RuntimeError("unsupported conditioning-cache quantization")
     return {
-        "mode": mode, "model": model, "resolution": resolution,
+        "experiment": experiment, "mode": mode, "model": model, "resolution": resolution,
         "duration": duration, "steps": steps, "exchangeChunks": chunks,
+        "dit": dit, "textEncoder": text_encoder, "skipBaseline": skip_baseline,
     }
+
+
+def result_refs(output: dict) -> list[dict]:
+    refs: list[dict] = []
+    direct = output.get("output")
+    if isinstance(direct, dict):
+        refs.append(direct)
+    stages = output.get("stages")
+    if isinstance(stages, list):
+        for stage in stages:
+            ref = stage.get("output") if isinstance(stage, dict) else None
+            if isinstance(ref, dict):
+                refs.append(ref)
+    return refs
 
 
 def main() -> None:
@@ -78,15 +109,29 @@ def main() -> None:
     item = validated(load_job(Path(args.job_file)))
     wait_runtime()
     width, height = (1344, 768) if item["resolution"] == "768P" else (832, 480)
-    command = [
-        "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(SCRIPT),
-        "--mode", item["mode"], "--model", item["model"],
-        "--width", str(width), "--height", str(height),
-        "--duration", str(float(item["duration"])), "--steps", str(item["steps"]),
-        "--exchange-chunks", str(item["exchangeChunks"]),
-        "--timeout-seconds", str(max(300, min(args.timeout, 7200))),
-        "--prefix", f"h3-multistream/{item['mode']}",
-    ]
+    if item["experiment"] == "conditioning-cache":
+        command = [
+            "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(CACHE_SCRIPT),
+            "--mode", item["mode"], "--dit", item["dit"],
+            "--text-encoder", item["textEncoder"],
+            "--width", str(width), "--height", str(height),
+            "--duration", str(float(item["duration"])), "--steps", str(item["steps"]),
+            "--exchange-chunks", str(item["exchangeChunks"]),
+            "--timeout-seconds", str(max(300, min(args.timeout, 7200))),
+            "--prefix", f"h3-cache/{item['mode']}-{item['dit']}-{item['textEncoder']}",
+        ]
+        if item["skipBaseline"]:
+            command.append("--skip-baseline")
+    else:
+        command = [
+            "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(SCRIPT),
+            "--mode", item["mode"], "--model", item["model"],
+            "--width", str(width), "--height", str(height),
+            "--duration", str(float(item["duration"])), "--steps", str(item["steps"]),
+            "--exchange-chunks", str(item["exchangeChunks"]),
+            "--timeout-seconds", str(max(300, min(args.timeout, 7200))),
+            "--prefix", f"h3-multistream/{item['mode']}",
+        ]
     result = subprocess.run(command, text=True, capture_output=True, timeout=7500, check=False)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout or "benchmark failed")[-4000:])
@@ -94,7 +139,9 @@ def main() -> None:
     if not lines:
         raise RuntimeError("benchmark returned no result")
     output = json.loads(lines[-1])
-    output["resultRef"] = json.dumps(output.get("output"), ensure_ascii=False)
+    refs = result_refs(output)
+    output["resultRefs"] = refs
+    output["resultRef"] = json.dumps(refs, ensure_ascii=False)
     print(json.dumps(output, ensure_ascii=False, separators=(",", ":")))
 
 

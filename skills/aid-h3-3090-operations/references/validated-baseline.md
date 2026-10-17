@@ -15,6 +15,19 @@ Last reconciled: 2026-10-17. Hardware: two RTX 3090 24 GiB cards on separate PCI
 
 The 1344×768, five-second, 20-step validation then completed in 1035.687 seconds after a model/shape switch and 430.341 seconds warm. Both outputs had identical decoded video and audio hashes and passed the sampled-frame review. Compared with the earlier production single-GPU warm result of 1409.896 seconds, the isolated stack is 69.5% faster end-to-end; that figure includes MultiStream plus retained weights and text conditioning. Keep it opt-in because it occupies both GPUs.
 
+At 832×480 and 20 steps, the exact-conditioning phase cache completed a
+repeat seed in 164.297 seconds versus 502.737 seconds through the full graph, a
+67.3% reduction (3.06×). Decoded video and audio hashes were identical. This
+is approved only for repeated T2V variants whose prompt, dimensions, frame
+count, checkpoint, encoder, VAE, LoRA and conditioning parameters are
+identical. Reference-image cache reuse has not been validated.
+
+The W6A8 DiT used 3.93 GiB less pinned weight cache and built that cache 26.6%
+faster, but sampled 4.3% slower warm and materially changed the same-seed
+output. INT8 ConvRot remains the quality default. The NVFP4/AWQ text encoder
+was 42.2% smaller on disk/staging and reduced cold encoding 28.9%, but is not
+numerically equivalent; it remains a multi-prompt/reference-review candidate.
+
 ## Completed scheduler evidence
 
 | Job | Profile and mode | Output | End-to-end worker time |
@@ -25,6 +38,10 @@ The 1344×768, five-second, 20-step validation then completed in 1035.687 second
 | 12 | FastH3 VSA, cold | 4 s, 480P | about 586.0 s client wall time |
 | 13 | FastH3 VSA, warm | 4 s, 480P | about 46.9 s client wall time |
 | 14 | Turbo, 2 references while FastH3 stayed warm on GPU1 | 4 s, 480P | 878.831 s |
+| 31 | Dual dense INT8, phase-cache validation | 4.458 s, 832×480 | 164.297 s cached / 502.737 s full |
+| 32 | Dual dense W6A8 comparison | 4.458 s, 832×480 | 170.261 s cached / 506.796 s full |
+| 33 | Dual dense INT8 + NVFP4 encoder | 4.458 s, 832×480 | 166.326 s cached |
+| 34 | FastH3 production restore, cold | 4 s, 480P | 675.767 s |
 
 Job 11 is a retained failed validation and must not be used as a success sample.
 
@@ -48,3 +65,4 @@ Do not turn the dual-card estimate into a current-state claim. It becomes valid 
 - Veda 480P cold/warm tests succeeded, but its throughput and residency were inferior to FastH3; keeping it warm has no current production benefit.
 - The two 3090s have no NVLink. A multi-GPU design must benchmark host-staged and PCIe peer transfer rather than assuming pooled 48 GiB VRAM.
 - The tested Sol-Attn arm was slower end-to-end and produced material ghosting. The tested FastH3 VSA arm was 11.8% faster than dual FastH3 dense but slower than the existing single-GPU FastH3 baseline and regressed prompt adherence. Neither is approved.
+- Phase-cache reuse is a strict-key optimization, not a general model cache. A missing or stale cache dimension can silently bind the wrong prompt or references, so fail closed on cache metadata mismatch.
