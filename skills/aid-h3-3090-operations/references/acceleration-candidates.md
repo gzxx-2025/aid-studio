@@ -22,6 +22,7 @@ Last reviewed: 2026-10-17. Treat every item below as experimental until it passe
 
 ## Do not deploy from headline numbers alone
 
+- **ComfyUI Aki/秋叶整合包** is a Windows convenience distribution, not an H3 accelerator. The Linux production worker already runs ComfyUI v0.39.0 on PyTorch 2.8/CUDA 12.8, while the validated FastH3 shadow worker already covers the relevant newer runtime combination (PyTorch 2.9.1/CUDA 13.0). Do not replace production with the bundle; benchmark individual runtime upgrades in an isolated scheduler profile instead.
 - MultiStream reference gains come from different GPUs and topology; this host crosses `SYS`, so PCIe/NUMA exchange may erase part of the gain.
 - Sparse attention and caches change the numerical trajectory. Measure accepted-clip throughput, not only seconds per step.
 - A low-step or distilled checkpoint is a different quality operating point, not a lossless replacement for standard 20-step H3.
