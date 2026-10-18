@@ -53,6 +53,14 @@ numerically equivalent; it remains a multi-prompt/reference-review candidate.
 | 37 | Single dense, FirstBlockCache A/B, 20 steps | 4.458 s, 832×480 | 82.137 s Fast sample / 112.173 s baseline sample |
 | 38 | FirstBlockCache warm confirmation | 4.458 s, 832×480 | 90.131 s Fast / 118.186 s Safe / 112.168 s baseline sample |
 | 39 | FastH3 production restore after reference/cache tests, cold | 4 s, 480P | 804.864 s |
+| 41 | Dual standard 20-step control | 5 s, 1344×768 | 1397.039 s cold |
+| 43 | Dual PDD 8-step | 5 s, 1344×768 | 880.599 s cold |
+| 44 | Dual PDD 8-step warm repeat | 5 s, 1344×768 | 305.237 s |
+| 45 | Dual standard 20-step + SageAttention | 5 s, 1344×768 | 1170.708 s cold |
+| 46 | Dual standard 20-step + SageAttention warm | 5 s, 1344×768 | 470.459 s |
+| 47 | FastH3 production closeout, concurrent cold start | 4 s, 480P | 1043.024 s |
+| 49 | Turbo production closeout after standard-service restart | 4 s, 832×480 | 898.337 s |
+| 50 | Turbo immediate warm repeat | 4 s, 832×480 | 212.741 s (`warm_hit=true`) |
 
 Job 11 is a retained failed validation and must not be used as a success sample.
 
@@ -79,3 +87,7 @@ Do not turn the dual-card estimate into a current-state claim. It becomes valid 
 - Phase-cache reuse is a strict-key optimization, not a general model cache. A missing or stale cache dimension can silently bind the wrong prompt or references, so fail closed on cache metadata mismatch.
 - Reference order is semantic input. Cache manifests must hash the ordered list, not a sorted set of files.
 - FirstBlockCache Fast is a reproducible 20-step preview candidate, not a quality default. Jobs 37 and 38 reduced measured warm sampling by 26.8% and 19.6% while retaining both references; decoded outputs for each arm were identical between the two jobs. Fast SSIM/PSNR against dense baseline were 0.8923/26.11 dB. Safe was 5.4% slower than baseline on the warm confirmation and is rejected for throughput. Keep Fast isolated until a broader face/gaze/audio review is complete.
+- PDD 8-step is an opt-in 768P preview candidate: its 305.237-second warm result beat the accepted dense 430.341-second baseline by 29.1%, but the current sample set is insufficient for final-quality face, gaze, hands, references and audio approval.
+- SageAttention is rejected for this deployment. Its 470.459-second warm result was 9.3% slower than the accepted dense baseline and changed same-seed composition.
+- ComfyUI 0.39 with the shared production node set idles around 1.5 GiB before model weights load. The scheduler allow-list threshold for `h3-standard-quality` is 2048 MiB; 512 MiB causes a false unauthorized-process block after restart.
+- Avoid simultaneous cold starts on both H3 lanes. Job 47 demonstrated storage/host-memory contention; warm residency is the primary production latency control.

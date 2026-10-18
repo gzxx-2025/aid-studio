@@ -64,6 +64,7 @@ For implementation or incident work, inspect only the relevant files:
 - `deploy/local/h3-shadow/run_conditioning_cache_benchmark.py`
 - `deploy/local/h3-shadow/run_reference_cache_benchmark.py`
 - `deploy/local/h3-shadow/run_firstblock_cache_benchmark.py`
+- `deploy/local/h3-shadow/run_pdd_sage_benchmark.py`
 - `deploy/local/comfy_h3_adapter.py`
 - `docs/benchmarks/h3-multistream-3090-2026-10-17.md`
 

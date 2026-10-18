@@ -94,6 +94,28 @@ class H3MultiStreamWorkerTest(unittest.TestCase):
                 referenceImages=["person-a.png", "person-b.png"],
             ))
 
+    def test_pdd_sage_accepts_isolated_768_variants(self):
+        pdd = worker.validated(self.job(
+            experiment="pdd-sage", mode="dual-dense", model="standard",
+            resolution="768P", duration=5, steps=8,
+            acceleration="pdd", attention="kitchen",
+        ))
+        self.assertEqual("pdd", pdd["acceleration"])
+        standard = worker.validated(self.job(
+            experiment="pdd-sage", mode="dual-dense", model="standard",
+            resolution="768P", duration=5, steps=20,
+            acceleration="standard", attention="sage",
+        ))
+        self.assertEqual("sage", standard["attention"])
+
+    def test_pdd_sage_rejects_wrong_step_count(self):
+        with self.assertRaisesRegex(RuntimeError, "steps do not match"):
+            worker.validated(self.job(
+                experiment="pdd-sage", mode="dual-dense", model="standard",
+                resolution="768P", duration=5, steps=20,
+                acceleration="pdd", attention="kitchen",
+            ))
+
 
 if __name__ == "__main__":
     unittest.main()

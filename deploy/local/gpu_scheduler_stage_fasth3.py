@@ -89,7 +89,9 @@ def stage_fasth3(source_root: Path, preflight: Path, token: str, home: Path,
         }
         agent["idleInfrastructure"] = [
             {
-                "profile": "h3-standard-quality", "maxIdleVramMb": 512,
+                # ComfyUI 0.39 settles around 1.5 GiB after importing the shared
+                # image/H3 node set, before any model weights are loaded.
+                "profile": "h3-standard-quality", "maxIdleVramMb": 2048,
                 "allowedProcessPatterns": [r"/home/neo/ComfyUI/main\.py.*--port 8188"],
             },
             {

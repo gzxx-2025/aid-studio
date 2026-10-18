@@ -46,6 +46,11 @@ class FastH3StageTest(unittest.TestCase):
                 profile["stopCommand"],
             )
             self.assertEqual(4, len(agent["idleInfrastructure"]))
+            standard_idle = next(
+                item for item in agent["idleInfrastructure"]
+                if item.get("profile") == "h3-standard-quality"
+            )
+            self.assertEqual(2048, standard_idle["maxIdleVramMb"])
             self.assertFalse(any(
                 item.get("profile") == "qwen38-local-llm"
                 for item in agent["idleInfrastructure"]

@@ -16,9 +16,32 @@ SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_multistream_benchmark.py")
 CACHE_SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_conditioning_cache_benchmark.py")
 REFERENCE_CACHE_SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_reference_cache_benchmark.py")
 FIRSTBLOCK_CACHE_SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_firstblock_cache_benchmark.py")
+PDD_SAGE_SCRIPT = Path("/mnt/disk2/h3-multistream-lab/run_pdd_sage_benchmark.py")
 ALLOWED_MODES = {"single-dense", "dual-dense", "dual-sol", "dual-vsa"}
 REFERENCE_NODES = {"LoadImage", "LoraLoaderModelOnly", "MiniMaxH3ReferenceToVideo"}
 FIRSTBLOCK_NODES = REFERENCE_NODES | {"ApplyMiniMaxH3FirstBlockCache"}
+PDD_NODES = {"MiniMaxH3PDDAccApply"}
+RUNTIME_SERVICE = "comfyui-h3-multistream.service"
+
+
+def validate_runtime_attention(requested: str) -> None:
+    result = subprocess.run(
+        ["systemctl", "--user", "show", RUNTIME_SERVICE, "-p", "MainPID", "--value"],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip().isdigit():
+        raise RuntimeError("cannot resolve MultiStream runtime process")
+    pid = int(result.stdout.strip())
+    if pid <= 0:
+        raise RuntimeError("MultiStream runtime is not running")
+    command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(
+        "utf-8", errors="replace"
+    )
+    sage_enabled = "--use-sage-attention" in command
+    if requested == "sage" and not sage_enabled:
+        raise RuntimeError("SageAttention requested but runtime was not started with it")
+    if requested == "kitchen" and sage_enabled:
+        raise RuntimeError("baseline requested but runtime has SageAttention enabled")
 
 
 def wait_runtime(timeout_seconds: int = 900, required_extra: set[str] | None = None) -> None:
@@ -67,6 +90,7 @@ def validated(job: dict) -> dict:
     chunks = int(benchmark.get("exchangeChunks") or 8)
     if experiment not in {
         "multistream", "conditioning-cache", "reference-cache", "firstblock-cache",
+        "pdd-sage",
     }:
         raise RuntimeError("unsupported benchmark experiment")
     if mode not in ALLOWED_MODES:
@@ -82,6 +106,16 @@ def validated(job: dict) -> dict:
     dit = str(benchmark.get("dit") or "int8")
     text_encoder = str(benchmark.get("textEncoder") or "int8")
     skip_baseline = bool(benchmark.get("skipBaseline", False))
+    acceleration = str(benchmark.get("acceleration") or "standard")
+    attention = str(benchmark.get("attention") or "kitchen")
+    if experiment == "pdd-sage":
+        if mode != "dual-dense" or model != "standard" or resolution != "768P" or duration != 5:
+            raise RuntimeError("pdd-sage validation requires dual standard 768P for 5 seconds")
+        if acceleration not in {"standard", "pdd"} or attention not in {"kitchen", "sage"}:
+            raise RuntimeError("unsupported pdd-sage variant")
+        allowed_steps = {20} if acceleration == "standard" else {4, 6, 8}
+        if steps not in allowed_steps:
+            raise RuntimeError("pdd-sage steps do not match the selected acceleration")
     if experiment == "conditioning-cache":
         if mode not in {"single-dense", "dual-dense"} or model != "standard":
             raise RuntimeError("conditioning-cache requires the standard dense model")
@@ -106,7 +140,8 @@ def validated(job: dict) -> dict:
         "experiment": experiment, "mode": mode, "model": model, "resolution": resolution,
         "duration": duration, "steps": steps, "exchangeChunks": chunks,
         "dit": dit, "textEncoder": text_encoder, "skipBaseline": skip_baseline,
-        "referenceImages": references,
+        "referenceImages": references, "acceleration": acceleration,
+        "attention": attention,
     }
 
 
@@ -135,9 +170,22 @@ def main() -> None:
         extra_nodes = REFERENCE_NODES
     elif item["experiment"] == "firstblock-cache":
         extra_nodes = FIRSTBLOCK_NODES
+    elif item["experiment"] == "pdd-sage" and item["acceleration"] == "pdd":
+        extra_nodes = PDD_NODES
     wait_runtime(required_extra=extra_nodes)
+    if item["experiment"] == "pdd-sage":
+        validate_runtime_attention(item["attention"])
     width, height = (1344, 768) if item["resolution"] == "768P" else (832, 480)
-    if item["experiment"] == "firstblock-cache":
+    if item["experiment"] == "pdd-sage":
+        command = [
+            "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(PDD_SAGE_SCRIPT),
+            "--acceleration", item["acceleration"], "--attention", item["attention"],
+            "--width", str(width), "--height", str(height),
+            "--duration", str(float(item["duration"])), "--steps", str(item["steps"]),
+            "--timeout-seconds", str(max(300, min(args.timeout, 7200))),
+            "--prefix", f"h3-pdd-sage/{item['acceleration']}-{item['attention']}",
+        ]
+    elif item["experiment"] == "firstblock-cache":
         command = [
             "/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python", str(FIRSTBLOCK_CACHE_SCRIPT),
             "--width", str(width), "--height", str(height),
