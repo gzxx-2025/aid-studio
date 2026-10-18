@@ -2,7 +2,7 @@
 
 Use this protocol for MultiStream, sparse attention, cache, quantization, or runtime comparisons. Keep production traffic out of the experiment window.
 
-Do not rely on unique node IDs to force a new ComfyUI execution. They may still return a cached output. Use a dedicated `IS_CHANGED` benchmark node downstream of reusable loaders, and reject any run that reuses the previous filename or completes without sampler log entries. `--cache-none` forces execution but also defeats model residency, so it cannot establish a warm baseline.
+Do not rely on unique node IDs to force a new ComfyUI execution. They may still return a cached output. Use a dedicated `IS_CHANGED` benchmark node downstream of reusable loaders, and reject any run that reuses the previous filename or completes without sampler log entries. When a common cross-runtime graph cannot include that node, use a fixed per-pass seed schedule (for example cold seed A, warm-1 seed B, warm-2 seed C) and use the same schedule in every comparison arm; compare matching seeds across arms. Reject any implausibly short warm run as a cache hit. `--cache-none` forces execution but also defeats model residency, so it cannot establish a warm baseline.
 
 ## Fixed comparison inputs
 

@@ -1,6 +1,6 @@
 # MiniMax H3 acceleration candidates for dual RTX 3090
 
-Last reviewed: 2026-10-17. Treat every item below as experimental until it passes the fixed-seed protocol in `benchmark-protocol.md` on `gpu-222`.
+Last reviewed: 2026-10-18. Treat every item below as experimental until it passes the fixed-seed protocol in `benchmark-protocol.md` on `gpu-222`.
 
 ## Test first
 
@@ -40,3 +40,4 @@ Last reviewed: 2026-10-17. Treat every item below as experimental until it passe
 - Raylight/xDiT is not a current deployment candidate: its published two-3090 1344×768 result is much slower than the validated local MultiStream stack and requires a separate runtime.
 - PDD 8-step remains an opt-in 768P preview candidate after a 305.237-second warm run, 29.1% faster than the accepted 430.341-second dense baseline. Do not use it for final output until the multi-prompt face, gaze, hands, reference-identity and audio set passes.
 - SageAttention is rejected for this stack: although its CUDA path was confirmed in logs, the 470.459-second warm result was 9.3% slower than dense and changed same-seed composition.
+- PyTorch 2.9.1/CUDA 13.0 is a high-value runtime candidate, not an Aki bundle deployment. On the same GPU0, ComfyUI 0.39 checkout, standard H3 INT8 ConvRot graph, 832×480, 107 frames, 20 steps and paired fixed seeds, CUDA 13 completed cold in 839.156 seconds versus two CUDA 12.8 cold runs of 992.114 and 1088.079 seconds (19.3% faster than their mean). The valid warm pair was 170.393 versus 350.681 seconds (51.4% faster, 2.06× throughput). Output specifications matched, and a four-frame visual spot check found no obvious anatomy or composition regression, but decoded media was not numerically equivalent (cold SSIM 0.7432/PSNR 19.49 dB; warm SSIM 0.6538/PSNR 14.33 dB; audio hashes differed). Keep production on CUDA 12.8 until CUDA 13 passes the 768P multi-reference face/gaze/hands/audio acceptance set.

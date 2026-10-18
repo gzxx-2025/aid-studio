@@ -8,6 +8,23 @@
   },
   "services": [
     {
+      "id": "h3-runtime-ab-benchmark",
+      "name": "MiniMax H3 CUDA 运行时隔离 A/B",
+      "profile": "h3-runtime-ab",
+      "category": "benchmark",
+      "controlType": "scheduled-workload",
+      "controlName": "H3 runtime A/B worker",
+      "ports": [8194],
+      "currentState": "DISABLED_TEST_ONLY",
+      "currentGpu": 0,
+      "currentVramMiB": 0,
+      "detection": "configured-capability",
+      "risk": "medium",
+      "recommendedAction": "仅在维护窗口临时启用；完成后关闭策略和影子服务",
+      "adapterReady": true,
+      "notes": "同一 ComfyUI、工作流、模型、参数、seed 和 GPU0，仅比较 torch2.8/cu128 与 torch2.9.1/cu130"
+    },
+    {
       "id": "h3-dual-dense-mode",
       "name": "MiniMax H3 双卡密集模式",
       "profile": "h3-dual-dense",

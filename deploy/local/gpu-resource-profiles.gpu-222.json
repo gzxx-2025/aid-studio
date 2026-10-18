@@ -1,4 +1,20 @@
 {
+  "h3-runtime-ab": {
+    "displayName": "MiniMax H3 运行时隔离 A/B",
+    "gpuCount": 1,
+    "gpuIndices": [0],
+    "enabled": false,
+    "defaultPriority": 96,
+    "maxClientPriority": 96,
+    "exclusive": true,
+    "nonPreemptible": true,
+    "warmKey": null,
+    "warmSeconds": 0,
+    "warmPriorityBoost": 0,
+    "switchPenaltySeconds": 0,
+    "expectedSeconds": 2400,
+    "maxRunSeconds": 14400
+  },
   "h3-dual-dense": {
     "displayName": "MiniMax H3 双卡最高质量",
     "gpuCount": 2,
