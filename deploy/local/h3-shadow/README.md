@@ -86,6 +86,37 @@ text conditioning, diffusion/latent save, and VAE decode phases:
 ```
 
 Use this only for trusted local cache files. A cache key must change whenever
-the prompt, reference hashes, dimensions, frame count, checkpoint, text
-encoder, VAE, LoRA, or conditioning parameters change. The current validation
-is text-to-video only; reference-image cache reuse is not approved.
+the prompt, ordered reference hashes, dimensions, frame count, checkpoint,
+text encoder, VAE, LoRA, or conditioning parameters change.
+
+Ordered multi-reference reuse is validated with:
+
+```bash
+./env-cu130/bin/python ./run_reference_cache_benchmark.py \
+  --url http://127.0.0.1:8193 --mode dual-dense \
+  --width 832 --height 480 --duration 4 \
+  --reference-image person-a.png --reference-image person-b.png
+```
+
+At 832×480 the cached repeat was 4.42× faster than the full graph and its
+decoded video/audio hashes matched exactly. A separate distinct-person run
+confirmed both reference identities, costumes and order. Do not sort the
+reference list when computing the cache key.
+
+## FirstBlockCache experiment
+
+The isolated port-8193 lab can load the pinned MIT-licensed
+`ComfyUI-MiniMaxH3-FirstBlockCache` node at commit
+`d474755360cc1784df1b7c933ca28195e55e3445`. It must not be installed into
+the production ComfyUI instance. Run the fixed 20-step reference A/B with:
+
+```bash
+./env-cu130/bin/python ./run_firstblock_cache_benchmark.py \
+  --url http://127.0.0.1:8193 --width 832 --height 480 --duration 4 \
+  --reference-image person-a.png --reference-image person-b.png
+```
+
+The benchmark warms the dense graph, then records dense, Safe and Fast arms
+with the same seed. Do not combine FirstBlockCache with Turbo/low-step LoRAs or
+another block cache. Treat it as approximate and review faces, gaze, costumes,
+motion and audio before considering any production route.

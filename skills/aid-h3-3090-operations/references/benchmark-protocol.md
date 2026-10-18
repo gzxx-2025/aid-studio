@@ -34,6 +34,13 @@ dimensions, frame count, checkpoint and text-encoder hashes, VAE, LoRA,
 conditioning parameters and runtime schema. Treat a cache miss or metadata
 mismatch as a hard miss. Never load cache files supplied by an untrusted user.
 
+For FirstBlockCache or another approximate block-reuse arm, warm its compiler
+path before recording timings. Compare sampler time separately from decode and
+end-to-end time, because the first cache run and first VAE decode can each carry
+one-time overhead. Never combine a block cache with a low-step/Turbo adapter in
+the same acceptance test. Record cached-step indices, then review identity,
+costume, hands, gaze, motion and audio against the dense baseline.
+
 ## Measurements
 
 Record for each run:

@@ -20,7 +20,7 @@ Treat the deployed production baseline as evidence, not as a template to rewrite
 - Use `h3-standard-quality` on GPU0 for 768P, reference images, first/last frames, Standard, or Turbo. The validated 768P ceiling is 5 seconds per segment.
 - Use `h3-single-fast` on GPU1 for 480P text-to-video previews. It is not a reference-image or 768P path.
 - Do not select Veda for production. Its retained profile is disabled because it consumed almost all VRAM without beating FastH3 at the validated 480P workload.
-- For repeated T2V variants with an identical conditioning tuple, the isolated phase cache is a validated opt-in accelerator. Never reuse it across changed prompts, reference hashes, dimensions, frames, model/encoder/VAE/LoRA identities, or conditioning parameters; reference-image reuse is not yet validated.
+- For repeated T2V or multi-reference variants with an identical conditioning tuple, the isolated phase cache is a validated opt-in accelerator. Never reuse it across changed prompts, ordered reference hashes, dimensions, frames, model/encoder/VAE/LoRA identities, or conditioning parameters.
 - Do not claim that one 768P render uses both GPUs. The current split allows one standard-quality job and one FastH3 preview service to coexist; GPU1 contributes no 768P output.
 - Treat Agnes as an external primary video provider only when the AID routing configuration selects it. Local H3 remains a separately measured fallback; do not merge Agnes queue time with H3 runtime.
 
@@ -62,6 +62,8 @@ For implementation or incident work, inspect only the relevant files:
 - `deploy/local/gpu_h3_multistream_worker.py`
 - `deploy/local/h3-shadow/run_multistream_benchmark.py`
 - `deploy/local/h3-shadow/run_conditioning_cache_benchmark.py`
+- `deploy/local/h3-shadow/run_reference_cache_benchmark.py`
+- `deploy/local/h3-shadow/run_firstblock_cache_benchmark.py`
 - `deploy/local/comfy_h3_adapter.py`
 - `docs/benchmarks/h3-multistream-3090-2026-10-17.md`
 

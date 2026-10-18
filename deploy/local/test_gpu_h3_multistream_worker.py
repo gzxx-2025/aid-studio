@@ -64,6 +64,36 @@ class H3MultiStreamWorkerTest(unittest.TestCase):
             [{"filename": "first.mp4"}, {"filename": "repeat.mp4"}], result,
         )
 
+    def test_reference_cache_requires_ordered_image_basenames(self):
+        result = worker.validated(self.job(
+            experiment="reference-cache", mode="dual-dense", model="standard",
+            resolution="480P", duration=4, steps=4, exchangeChunks=8,
+            referenceImages=["person-a.png", "person-b.png"],
+        ))
+        self.assertEqual(["person-a.png", "person-b.png"], result["referenceImages"])
+
+    def test_reference_cache_rejects_paths(self):
+        with self.assertRaisesRegex(RuntimeError, "basenames"):
+            worker.validated(self.job(
+                experiment="reference-cache", mode="dual-dense", model="standard",
+                resolution="480P", duration=4, steps=4,
+                referenceImages=["../person-a.png", "person-b.png"],
+            ))
+
+    def test_firstblock_cache_requires_twenty_steps(self):
+        result = worker.validated(self.job(
+            experiment="firstblock-cache", mode="single-dense", model="standard",
+            resolution="480P", duration=4, steps=20, exchangeChunks=8,
+            referenceImages=["person-a.png", "person-b.png"],
+        ))
+        self.assertEqual("firstblock-cache", result["experiment"])
+        with self.assertRaisesRegex(RuntimeError, "requires 480P and 20 steps"):
+            worker.validated(self.job(
+                experiment="firstblock-cache", mode="single-dense", model="standard",
+                resolution="480P", duration=4, steps=4,
+                referenceImages=["person-a.png", "person-b.png"],
+            ))
+
 
 if __name__ == "__main__":
     unittest.main()
