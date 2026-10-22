@@ -1,0 +1,15 @@
+[Unit]
+Description=ComfyUI MiniMax H3 MultiStream benchmark worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/disk2/h3-multistream-lab/ComfyUI
+ExecStart=/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python /mnt/disk2/h3-multistream-lab/ComfyUI/main.py --listen 127.0.0.1 --port 8193 --disable-async-offload --reserve-vram 2 --extra-model-paths-config /mnt/disk2/h3-multistream-lab/extra_model_paths.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,35 @@
+{
+  "h3-dual-dense": {
+    "gpuCount": 2,
+    "exclusive": true,
+    "nonPreemptible": true,
+    "warmKey": "minimax-h3:ref2va:dense",
+    "warmSeconds": 1200,
+    "warmPriorityBoost": 40,
+    "switchPenaltySeconds": 600,
+    "expectedSeconds": 240,
+    "maxRunSeconds": 7200
+  },
+  "qianchuan-render": {
+    "gpuCount": 1,
+    "exclusive": true,
+    "nonPreemptible": true,
+    "warmKey": null,
+    "warmSeconds": 0,
+    "warmPriorityBoost": 0,
+    "switchPenaltySeconds": 30,
+    "expectedSeconds": 300,
+    "maxRunSeconds": 3600
+  },
+  "douyin-edit": {
+    "gpuCount": 1,
+    "exclusive": true,
+    "nonPreemptible": true,
+    "warmKey": null,
+    "warmSeconds": 0,
+    "warmPriorityBoost": 0,
+    "switchPenaltySeconds": 15,
+    "expectedSeconds": 180,
+    "maxRunSeconds": 3600
+  }
+}

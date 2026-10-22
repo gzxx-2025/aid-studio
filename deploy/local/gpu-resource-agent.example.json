@@ -1,0 +1,26 @@
+{
+  "managerUrl": "https://gpu-manager.example.internal",
+  "agentToken": "replace-with-agent-token",
+  "nodeId": "gpu-222",
+  "hostname": "gpu-222",
+  "pollSeconds": 2,
+  "executionMode": "observe",
+  "terminationGraceSeconds": 5,
+  "spoolDir": "/var/lib/aid-gpu-agent/jobs",
+  "profiles": {
+    "h3-dual-dense": {
+      "startCommand": ["/usr/local/libexec/aid-gpu/start-h3-dual"],
+      "stopCommand": ["/usr/local/libexec/aid-gpu/stop-h3-dual"],
+      "runCommand": ["/usr/local/libexec/aid-gpu/submit-h3-job", "{job_file}"],
+      "allowedProcessPatterns": ["ComfyUI.*minimax", "aid-h3-dual\\.service"],
+      "startTimeoutSeconds": 900,
+      "stopTimeoutSeconds": 300
+    },
+    "qianchuan-render": {
+      "runCommand": ["/usr/local/libexec/aid-gpu/run-qianchuan-job", "{job_file}"]
+    },
+    "douyin-edit": {
+      "runCommand": ["/usr/local/libexec/aid-gpu/run-douyin-job", "{job_file}"]
+    }
+  }
+}

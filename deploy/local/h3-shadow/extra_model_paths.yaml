@@ -1,0 +1,12 @@
+production_h3_shared:
+  base_path: /mnt/disk3/comfyui/ComfyUI
+  text_encoders: models/text_encoders
+  vae: models/vae
+  vae_approx: models/vae_approx
+  audio_encoders: models/audio_encoders
+  loras: models/loras
+  model_patches: models/model_patches
+
+fastvideo_h3:
+  base_path: /mnt/disk2/models/minimax-h3-fastvideo
+  diffusion_models: .

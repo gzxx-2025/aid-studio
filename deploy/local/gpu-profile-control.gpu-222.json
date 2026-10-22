@@ -1,0 +1,75 @@
+{
+  "profiles": {
+    "h3-standard-quality": {
+      "controller": {"type": "systemd-system", "units": ["comfyui.service"]},
+      "preStopChecks": [{"type": "comfy-queue", "url": "http://127.0.0.1:8188/queue"}],
+      "healthUrls": ["http://127.0.0.1:8188/system_stats"],
+      "healthTimeoutSeconds": 900
+    },
+    "h3-single-fast": {
+      "controller": {"type": "systemd-user", "user": "neo", "uid": 1000, "units": ["comfyui-fasth3.service"]},
+      "preStopChecks": [{"type": "comfy-queue", "url": "http://127.0.0.1:8191/queue"}],
+      "healthUrls": ["http://127.0.0.1:8191/system_stats"],
+      "healthTimeoutSeconds": 900
+    },
+    "h3-veda-fast": {
+      "controller": {"type": "systemd-user", "user": "neo", "uid": 1000, "units": ["comfyui-veda.service"]},
+      "preStopChecks": [{"type": "comfy-queue", "url": "http://127.0.0.1:8192/queue"}],
+      "healthUrls": ["http://127.0.0.1:8192/system_stats"],
+      "healthTimeoutSeconds": 900
+    },
+    "qwen38-local-llm": {
+      "controller": {"type": "systemd-user", "user": "neo", "uid": 1000, "units": ["qwen38-gpu1.service"]},
+      "preStopChecks": [{
+        "type": "llama-slots", "url": "http://10.190.0.222:18080/slots",
+        "apiKeyFile": "/home/neo/.config/qwen38/api-keys.txt"
+      }],
+      "healthTcp": ["10.190.0.222:18080"],
+      "healthTimeoutSeconds": 300
+    },
+    "qianchuan-asr": {
+      "controller": {"type": "systemd-user", "user": "neo", "uid": 1000, "units": ["qianchuan-story-analyzer.service"]},
+      "healthUrls": ["http://127.0.0.1:7873/health"],
+      "healthTimeoutSeconds": 300
+    },
+    "subtitle-cleaner": {
+      "controller": {"type": "systemd-system", "units": ["subtitle-cleaner.service"]}
+    },
+    "video-product-replacer": {
+      "controller": {"type": "systemd-system", "units": ["video-product-replacer-poc.service"]}
+    },
+    "video-remix": {
+      "controller": {"type": "systemd-system", "units": ["video-remix-studio-worker.service"]}
+    },
+    "douyin-gpu-processing": {
+      "controller": {"type": "systemd-user", "user": "neo", "uid": 1000, "units": ["douyin-gpu-service.service"]},
+      "preStopChecks": [{
+        "type": "json-fields-idle", "url": "http://127.0.0.1:8877/health",
+        "expected": {"gpu_busy": false, "queue_depth": 0, "clip_jobs_running": 0, "clip_jobs_pending": 0}
+      }],
+      "healthUrls": ["http://127.0.0.1:8877/health"]
+    },
+    "qianchuan-render": {
+      "controller": {
+        "type": "docker-compose", "composeFile": "/home/neo/wm-build/docker-compose.deploy.yml",
+        "units": ["celery_worker"]
+      }
+    },
+    "video-generate-legacy": {
+      "controller": {
+        "type": "docker-compose", "composeFile": "/mnt/disk3/video-generate/docker-compose.yml",
+        "units": ["gpu_queue", "celery_worker"]
+      }
+    },
+    "avcs-gpu": {
+      "controller": {
+        "type": "docker-compose", "composeFile": "/mnt/disk3/AVCS/docker-compose.yml",
+        "units": ["celery-gpu0"]
+      }
+    },
+    "omnivoice-tts-local": {
+      "controller": {"type": "systemd-system", "units": ["omnivoice.service", "omnivoice-studio.service"]},
+      "healthTcp": ["127.0.0.1:7861", "127.0.0.1:7862"]
+    }
+  }
+}

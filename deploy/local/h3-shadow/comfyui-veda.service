@@ -1,0 +1,15 @@
+[Unit]
+Description=ComfyUI 0.39 H3 Veda FAST worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/neo/comfyui-h3-veda-039/ComfyUI
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python /home/neo/comfyui-h3-veda-039/ComfyUI/main.py --listen 0.0.0.0 --port 8192 --cuda-device 0 --disable-async-offload --reserve-vram 2 --extra-model-paths-config /home/neo/comfyui-fasth3-shadow/extra_model_paths.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

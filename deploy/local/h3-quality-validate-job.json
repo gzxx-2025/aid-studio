@@ -1,0 +1,18 @@
+{
+  "jobId": 0,
+  "source": "deployment-validation",
+  "profile": "h3-standard-quality",
+  "payload": {
+    "videoRequest": {
+      "model": "MiniMax-H3",
+      "duration": 4,
+      "resolution": "480P",
+      "ratio": "16:9",
+      "acceleration": "stable",
+      "content": [
+        {"type": "text", "text": "A calm rural road at sunrise, static camera."}
+      ]
+    }
+  },
+  "gpuIds": []
+}

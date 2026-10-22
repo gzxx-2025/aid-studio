@@ -1,0 +1,15 @@
+[Unit]
+Description=ComfyUI H3 CUDA 13 runtime A/B shadow
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/neo/ComfyUI
+Environment=CUDA_VISIBLE_DEVICES=0
+ExecStart=/home/neo/comfyui-fasth3-shadow/env-cu130/bin/python /home/neo/ComfyUI/main.py --listen 127.0.0.1 --port 8194 --cuda-device 0 --cpu-vae --disable-async-offload --reserve-vram 4
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
